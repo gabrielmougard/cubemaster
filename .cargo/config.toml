@@ -1,0 +1,24 @@
+[target.xtensa-esp32s3-none-elf]
+# Flash only (no monitor). To view defmt logs, run in a separate terminal:
+#   espflash monitor --log-format defmt \
+#     --elf target/xtensa-esp32s3-none-elf/release/cubemaster --non-interactive
+# See README.md for the full run + monitor workflow.
+#
+# We deliberately avoid `--monitor` here: the interactive serial reader fails
+# with "I/O error" on some Linux hosts (ModemManager races the port open on
+# /dev/ttyACM*). The non-interactive monitor invoked manually works reliably.
+runner = "espflash flash --before usb-reset --after watchdog-reset"
+
+[env]
+DEFMT_LOG="info"
+
+[build]
+rustflags = [
+  "-C", "link-arg=-nostartfiles",
+  "-Z", "stack-protector=all",
+]
+
+target = "xtensa-esp32s3-none-elf"
+
+[unstable]
+build-std = ["alloc", "core"]
