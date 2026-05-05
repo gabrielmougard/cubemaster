@@ -21,35 +21,17 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
-  build-diagrams:
-    name: Build PlantUML diagrams
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Upload diagram artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagrams
-          path: doc/diagrams/img/*.svg
-          retention-days: 1
-
   build-spec:
-    name: Build Bikeshed spec
-    needs: build-diagrams
+    name: Build and deploy
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download diagrams
-        uses: actions/download-artifact@v4
-        with:
-          name: diagrams
-          path: doc/diagrams/img/
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
@@ -60,14 +42,13 @@ jobs:
         working-directory: doc
         run: bikeshed spec cubemaster-mvp.bs cubemaster-mvp.html
 
-      - name: Copy assets
+      - name: Prepare site
         run: |
           mkdir -p _site/diagrams/img
           cp doc/cubemaster-mvp.html _site/index.html
           cp doc/diagrams/img/*.svg _site/diagrams/img/ 2>/dev/null || true
 
-      - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v4
         with:
           path: _site
 
@@ -80,6 +61,4 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v4
