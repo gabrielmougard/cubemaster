@@ -10,8 +10,8 @@
 use esp_hal::clock::CpuClock;
 use esp_hal::timer::timg::TimerGroup;
 
-use esp_radio::ble::controller::BleConnector;
 use bt_hci::controller::ExternalController;
+use esp_radio::ble::controller::BleConnector;
 use trouble_host::prelude::*;
 
 use embassy_executor::Spawner;

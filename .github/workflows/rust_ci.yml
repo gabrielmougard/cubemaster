@@ -2,16 +2,30 @@ name: Rust CI
 
 on:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/README.md"
+    branches: [main]
+    paths:
+      - '.github/workflows/rust_ci.yml'
+      - '**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/config.toml'
+      - 'rust-toolchain.toml'
+      - '.clippy.toml'
+      - 'build.rs'
   pull_request:
+    paths:
+      - '.github/workflows/rust_ci.yml'
+      - '**/*.rs'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - '.cargo/config.toml'
+      - 'rust-toolchain.toml'
+      - '.clippy.toml'
+      - 'build.rs'
   workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   rust-checks:
@@ -28,15 +42,15 @@ jobs:
           - command: clippy
             args: --all-features --workspace -- -D warnings
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-      - name: Setup Rust
-        uses: esp-rs/xtensa-toolchain@v1.5
+      - uses: actions/checkout@v4
+
+      - uses: esp-rs/xtensa-toolchain@v1.5
         with:
           default: true
           buildtargets: esp32s3
           ldproxy: false
-      - name: Enable caching
-        uses: Swatinem/rust-cache@v2
-      - name: Run command
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Run ${{ matrix.action.command }}
         run: cargo ${{ matrix.action.command }} ${{ matrix.action.args }}
