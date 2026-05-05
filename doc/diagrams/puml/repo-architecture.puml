@@ -1,0 +1,71 @@
+@startuml repo-architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam packageBackgroundColor #EEEEFF
+skinparam packageBorderColor #333333
+
+title CubeMaster Repository — Rust Workspace Architecture
+
+package "cubemaster (Workspace Root)" as root #LightBlue {
+  package "firmware/" as fw {
+    [esp32s3-bin] as fwbin
+    [lib.rs\n(HAL abstractions)] as fwlib
+    [audio_i2s.rs] as audiom
+    [led_rmt.rs] as ledm
+    [voice_pdm.rs] as voicem
+    [ble_gatt.rs] as blem
+    [wifi_server.rs] as wifim
+    [sd_fs.rs] as sdm
+    [btn_mon.rs] as btnm
+    [main.rs\n(Supervisor)] as mainrs
+  }
+  
+  package "companion/" as app {
+    [dioxus-app] as appbin
+    [components/] as comp
+    [views/] as views
+    [ble_client.rs] as bleclient
+    [wifi_client.rs] as wificlient
+    [sound_banks.rs] as banks
+    [sound_pack_marketplace.rs] as mkp
+  }
+  
+  package "shared/" as shared {
+    [types.rs\n(Protocol types)] as types
+    [proto.rs\n(BLE GATT UUIDs)] as proto
+    [codec.rs\n(Sound format)] as codec
+  }
+  
+  package "x-tools/" as tools {
+    [cli.rs\n(Flash, deploy)] as cli
+  }
+  
+  package "doc/" as doc {
+    [cubemaster-mvp.bs\n(Bikeshed spec)] as spec
+    [diagrams/\n(PlantUML)] as diagrams
+  }
+  
+  package "tasks/" as tasks {
+    [epics/] as epics
+    [tickets/] as tickets
+  }
+}
+
+fwbin ..> fwlib
+fwlib ..> shared
+
+appbin ..> shared
+appbin ..> comp
+appbin ..> views
+
+tools ..> shared
+
+note bottom of root
+  Cargo workspace monorepo
+  · firmware: no_std, esp32s3 target
+  · companion: std, desktop + mobile
+  · shared: no_std compatible
+  · x-tools: std, developer CLI
+end note
+
+@enduml

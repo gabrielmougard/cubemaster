@@ -1,0 +1,40 @@
+@startuml system-architecture
+!theme plain
+skinparam defaultTextAlignment center
+skinparam backgroundColor #FFFFFF
+skinparam packageBorderColor #333333
+skinparam packageFontSize 14
+
+title CubeMaster MVP — System Architecture
+
+package "Cube (ESP32-S3)" as cube #LightBlue {
+  component "Firmware\n(Embassy RTOS)" as fw
+}
+
+package "Companion App\n(Dioxus)" as app #LightGreen {
+  component "Desktop/Mobile\nFrontend" as desktop
+}
+
+cloud "BLE (Control)" as ble
+cloud "Wi-Fi (Streaming)" as wifi
+
+database "SD Card\n(Sounds/LED Patterns)" as sd
+
+folder "LED Panels\n(4× 16×16 WS2812B)" as leds
+folder "Audio\n(MAX98357A + Speaker)" as audio
+folder "Voice\n(PDM Microphone)" as mic
+
+actor "Game Master" as gm
+
+gm --> desktop : Interact
+desktop --> ble : Commands/Config
+desktop --> wifi : Sound data upload
+desktop --> wifi : LED pattern upload
+ble --> cube : GATT Control
+wifi --> cube : HTTP/TCP Streaming
+cube --> sd : Read/Write sounds
+cube --> leds : RMT DMA (4 channels)
+cube --> audio : I2S DMA
+cube --> mic : PDM Input
+
+@enduml

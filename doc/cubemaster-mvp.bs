@@ -1,0 +1,799 @@
+<pre class="metadata">
+Title: CubeMaster MVP — Firmware & System Specification
+Shortname: cubemaster-mvp
+Editor: CubeMaster Team
+Status: DREAM
+Assume Explicit For: yes
+Repository: cubemaster/cubemaster
+URL: https://cubemaster.github.io/cubemaster/
+Work Status: exploring
+Abstract: |
+  This document defines the engineering specification for the
+  CubeMaster Minimum Viable Product (MVP). CubeMaster is an intelligent
+  role-playing companion device — a cube with four LED matrix faces and
+  audio output — controlled via a companion application over BLE and
+  Wi-Fi. The MVP targets breadboard prototyping with an ESP32-S3
+  microcontroller powered via USB (no battery system). The companion
+  app is built with Dioxus (Rust) targeting desktop and mobile
+  platforms.
+</pre>
+
+<style>
+  table {
+    border-collapse: collapse;
+    margin: 1em 0;
+    width: 100%;
+  }
+  th, td {
+    border: 1px solid #888;
+    padding: 0.4em 0.7em;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #e8e8e8;
+    font-weight: 600;
+  }
+  tr:nth-child(even) { background: #f8f8f8; }
+</style>
+
+# Introduction # {#introduction}
+
+<em>This section is non-normative.</em>
+
+## Product Vision ## {#vision}
+
+CubeMaster is an intelligent, role-play companion device shaped as a
+cube. Each of its four lateral faces contains a 16×16 RGB LED grid,
+and a speaker provides directional audio output. The cube listens to
+the environment via an I2S microphone, detects programmed keywords
+using on-device keyword spotting, and plays associated sounds with
+synchronized LED animations. The cube's behavior — keyword-to-sound
+mappings and LED patterns — is configured via a companion application
+over BLE and Wi-Fi.
+
+The companion app is a Dioxus-based cross-platform application
+(desktop + mobile) that serves as the control surface for the cube
+and as a hub for sharing sound packs between CubeMaster users.
+
+## Architecture Decisions ## {#decisions}
+
+The following high-level decisions were made per the product
+requirements:
+
+<table>
+  <thead><tr><th>Decision</th><th>Rationale</th></tr></thead>
+  <tbody>
+    <tr><td>ESP32-S3 microcontroller</td><td>Dual-core RISC-V, 512KB SRAM, 8MB PSRAM, native BLE 5.0 + Wi-Fi, RMT + I2S DMA</td></tr>
+    <tr><td>Embassy RTOS (Rust)</td><td>Async executor for ergonomic concurrent tasks</td></tr>
+    <tr><td>BLE for control, Wi-Fi for bulk</td><td>BLE is low-latency for commands; Wi-Fi enables fast sound file uploads</td></tr>
+    <tr><td>SD card + app streaming</td><td>Dual-mode: onboard SD for standalone playback, Wi-Fi streaming for larger sets</td></tr>
+    <tr><td>Dioxus (Rust) companion app</td><td>Single Rust codebase for desktop and mobile</td></tr>
+    <tr><td>Cargo workspace monorepo</td><td>Shared protocol crate between firmware and companion app</td></tr>
+  </tbody>
+</table>
+
+## MVP Scope ## {#mvp-scope}
+
+The MVP targets breadboard development with an ESP32-S3 development
+kit powered via USB (no battery management). It includes the full
+feature set minus power management:
+
+- 4× 16×16 WS2812B LED panels (one per lateral face)
+- 1× MAX98357A I2S amplifier + 1× 3W speaker
+- 1× PDM microphone (MP34DT06)
+- 1× microSD card slot for sound and pattern storage
+- 1× power button, 1× volume button, 1× battery indicator LED
+- BLE GATT server for control and configuration
+- Wi-Fi server for bulk uploads and streaming
+- On-device keyword spotting (VAD + Goertzel KWS)
+- Dioxus companion app (desktop first, mobile follow-up)
+
+Inclusions explicitly out of scope for MVP: battery charging circuit,
+power path management, multi-cube synchronization, TTS engine, mood
+engine, sound pack marketplace, 3D-printed enclosure, custom PCB.
+
+# System Architecture # {#system-architecture}
+
+<em>This section is normative.</em>
+
+## Overview ## {#system-overview}
+
+The CubeMaster system consists of two primary components: the Cube
+hardware (ESP32-S3 firmware) and the Companion App (Dioxus). They
+communicate over two wireless channels: BLE for low-latency control
+and Wi-Fi for bulk data transfer.
+
+<figure>
+  <img src="diagrams/img/system-architecture.svg" alt="System architecture overview diagram">
+  <figcaption>CubeMaster system architecture — high-level component diagram</figcaption>
+</figure>
+
+### Communication Channels ### {#communication-channels}
+
+Two wireless interfaces are used:
+
+1. <strong>BLE (Bluetooth Low Energy)</strong>: Used for all command/control and
+    small data transfers. The ESP32-S3 acts as a GATT peripheral with
+    three services. BLE is always available regardless of Wi-Fi state.
+
+2. <strong>Wi-Fi (802.11 b/g/n)</strong>: Used for bulk sound file uploads (&gt;10KB)
+    and optional audio streaming. The ESP32-S3 runs a lightweight HTTP
+    server and WebSocket endpoint when Wi-Fi is configured. Wi-Fi is
+    disabled by default to save power; the companion app instructs
+    connection when needed.
+
+### Dual Storage Mode ### {#dual-storage}
+
+The cube operates in two storage modes:
+
+<strong>Standalone Mode (SD Card)</strong>: Sounds are pre-loaded onto the
+microSD card via BLE upload or direct file copy. The cube plays
+sounds directly from SD without requiring the companion app.
+
+<strong>Streaming Mode (Wi-Fi)</strong>: The companion app streams sound data
+over Wi-Fi WebSocket or HTTP in real-time. This enables access to
+larger sound libraries that don't fit on the SD card.
+
+<div class=issue>
+Finalize whether streaming uses WebSocket push from the app or HTTP
+pull from a server on the cube. The initial implementation should
+support HTTP Chunked Transfer from the cube's HTTP server.
+</div>
+
+## Rust Workspace Structure ## {#workspace-structure}
+
+The repository is organized as a Cargo workspace monorepo:
+
+<figure>
+  <img src="diagrams/img/repo-architecture.svg" alt="Repository architecture">
+  <figcaption>Cargo workspace structure</figcaption>
+</figure>
+
+### Crate Descriptions ### {#crate-descriptions}
+
+<dl>
+  <dt><code>firmware/</code></dt>
+  <dd>
+    <code>#![no_std]</code> crate targeting <code>xtensa-esp32s3-none-elf</code>. Contains
+    all on-device logic: LED driver, audio playback, voice pipeline,
+    BLE GATT server, Wi-Fi server, SD card filesystem, button handler,
+    and the main supervisor task loop. Uses Embassy as the async
+    executor. Dependencies: <code>esp-hal</code>, <code>esp-radio</code>,
+    <code>embassy-executor</code>, <code>embassy-net</code>,
+    <code>trouble-host</code>, <code>embedded-sdmmc</code>.
+  </dd>
+
+  <dt><code>companion/</code></dt>
+  <dd>
+    Standard Rust crate built as a Dioxus desktop and mobile
+    application. Provides the UI for managing sound banks, configuring
+    keyword-to-sound mappings, triggering sounds manually, uploading
+    to the cube, and browsing/modifying the cube state. Dependencies:
+    <code>dioxus</code>, <code>btleplug</code> (BLE), <code>reqwest</code>
+    (Wi-Fi HTTP), <code>cpal</code> (audio preview).
+  </dd>
+
+  <dt><code>shared/</code></dt>
+  <dd>
+    <code>no_std</code>-compatible crate with no target-specific dependencies.
+    Contains:
+    - Protocol message types (serde-serializable)
+    - BLE GATT UUID definitions
+    - Sound format constants (sample rate, bit depth, frame size)
+    - Keyword configuration data structures
+    - LED pattern format definitions
+    - Used by both <code>firmware</code> and <code>companion</code>.
+  </dd>
+
+  <dt><code>x-tools/</code></dt>
+  <dd>
+    Developer CLI tool for flashing firmware, formatting SD cards for
+    the cube, running integration tests, and generating test sound
+    packs. Dependencies: <code>espflash</code>, <code>clap</code>,
+    <code>shared</code>.
+  </dd>
+</dl>
+
+# Cube Hardware (ESP32-S3) # {#cube-hardware}
+
+<em>This section is normative.</em>
+
+## Bill of Materials (MVP Breadboard) ## {#bom}
+
+<table>
+  <thead><tr><th>Component</th><th>Qty</th><th>Model</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>MCU Dev Board</td><td>1</td><td>ESP32-S3-DevKitC-1-N8R8</td><td>8MB Flash, 8MB PSRAM on USB</td></tr>
+    <tr><td>LED Panel</td><td>4</td><td>16×16 WS2812B flexible</td><td>256 LEDs/panel, 5V power</td></tr>
+    <tr><td>Level Shifter</td><td>4</td><td>74AHCT125</td><td>3.3V → 5V for RMT DIN</td></tr>
+    <tr><td>I2S Amplifier</td><td>1</td><td>MAX98357A (Adafruit 3006)</td><td>3W/channel @ 5V/4Ω</td></tr>
+    <tr><td>Speaker</td><td>1</td><td>Pamex PX-4013 3W 4Ω</td><td>40mm full-range</td></tr>
+    <tr><td>PDM Microphone</td><td>1</td><td>MP34DT06 breakout</td><td>Top-mounted</td></tr>
+    <tr><td>microSD Slot</td><td>1</td><td>SPI breakout</td><td>CS=GPIO13, MOSI=11, MISO=12, SCK=10</td></tr>
+    <tr><td>Power Button</td><td>1</td><td>Tactile switch + pull-up</td><td>GPIO0 (boot-safe)</td></tr>
+    <tr><td>Volume Button</td><td>1</td><td>Tactile switch + pull-up</td><td>GPIO1</td></tr>
+    <tr><td>Battery LED</td><td>1</td><td>5mm RGB common cathode</td><td>Status indicator</td></tr>
+    <tr><td>Power Supply</td><td>1</td><td>USB-C 5V/3A</td><td>Direct USB from dev board</td></tr>
+    <tr><td>Breadboard + Wires</td><td>Lot</td><td>—</td><td>Prototyping</td></tr>
+    <tr><td>Breadboard Power Rails</td><td>2</td><td>—</td><td>5V and 3.3V distribution</td></tr>
+    <tr><td>Capacitors</td><td>4</td><td>1000µF 10V electrolytic</td><td>One per LED panel bus</td></tr>
+  </tbody>
+</table>
+
+## Pinout ## {#pinout}
+
+<table>
+  <thead><tr><th>GPIO</th><th>Function</th><th>Connected To</th></tr></thead>
+  <tbody>
+    <tr><td>GPIO0</td><td>Power button</td><td>Tactile switch → GND</td></tr>
+    <tr><td>GPIO1</td><td>Volume button</td><td>Tactile switch → GND</td></tr>
+    <tr><td>GPIO4</td><td>I2S BCLK</td><td>MAX98357A BCLK</td></tr>
+    <tr><td>GPIO5</td><td>I2S LRCLK</td><td>MAX98357A LRCLK</td></tr>
+    <tr><td>GPIO6</td><td>I2S DATA</td><td>MAX98357A DIN</td></tr>
+    <tr><td>GPIO7</td><td>PDM CLK</td><td>MP34DT06 CLK</td></tr>
+    <tr><td>GPIO8</td><td>PDM DATA</td><td>MP34DT06 DATA</td></tr>
+    <tr><td>GPIO10</td><td>SD SCK</td><td>microSD SCK</td></tr>
+    <tr><td>GPIO11</td><td>SD MOSI</td><td>microSD MOSI</td></tr>
+    <tr><td>GPIO12</td><td>SD MISO</td><td>microSD MISO</td></tr>
+    <tr><td>GPIO13</td><td>SD CS</td><td>microSD CS</td></tr>
+    <tr><td>GPIO14</td><td>Battery LED R</td><td>RGB LED (or voltage divider to ADC)</td></tr>
+    <tr><td>GPIO26</td><td>RMT CH0</td><td>74AHCT125 → Panel 0 DIN</td></tr>
+    <tr><td>GPIO27</td><td>RMT CH1</td><td>74AHCT125 → Panel 1 DIN</td></tr>
+    <tr><td>GPIO33</td><td>RMT CH2</td><td>74AHCT125 → Panel 2 DIN</td></tr>
+    <tr><td>GPIO34</td><td>RMT CH3</td><td>74AHCT125 → Panel 3 DIN</td></tr>
+  </tbody>
+</table>
+
+# Firmware Specification # {#firmware}
+
+<em>This section is normative.</em>
+
+## Execution Model ## {#execution-model}
+
+The firmware uses Embassy as the async executor on the ESP32-S3.
+Embassy tasks are spawned at initialization and communicate via
+<code>embassy::sync::Channel</code> message passing. The dual-core S3 is fully
+utilized: Core 0 handles real-time peripherals (LED RMT DMA, I2S
+DMA), while Core 1 handles BLE, Wi-Fi, and voice processing.
+
+## Module Architecture ## {#module-architecture}
+
+<figure>
+  <img src="diagrams/img/firmware-architecture.svg" alt="Firmware module architecture">
+  <figcaption>Internal firmware module architecture and data flow</figcaption>
+</figure>
+
+### Main Supervisor ### {#main-supervisor}
+
+The supervisor is the central orchestrator. It receives events from
+peripheral modules, makes decisions based on the current sound/keyword
+configuration, and dispatches playback commands.
+
+```rust
+// Simplified supervisor event loop
+#[embassy_executor::task]
+async fn supervisor(
+    mut led_cmd: Sender<'static, LedCommand>,
+    mut audio_cmd: Sender<'static, AudioCommand>,
+    mut ble_rx: Receiver<'static, BleEvent>,
+    mut voice_rx: Receiver<'static, VoiceEvent>,
+) {
+    loop {
+        select! {
+            BleEvent::Play { sound_id, face, volume } => {
+                audio_cmd.send(AudioCommand::Play { id: sound_id, volume, pan: face_to_pan(face) }).await;
+                led_cmd.send(LedCommand::PlayPattern { id: sound_id, face }).await;
+            }
+            BleEvent::UploadStart { .. } => { /* handle chunked upload to SD */ }
+            VoiceEvent::Keyword { keyword_id, confidence } => {
+                if confidence >= threshold() {
+                    let config = get_keyword_config(keyword_id).await;
+                    audio_cmd.send(AudioCommand::Play { id: config.sound_id, volume, pan }).await;
+                    led_cmd.send(LedCommand::PlayPattern { id: config.pattern_id, face }).await;
+                }
+            }
+        }
+    }
+}
+```
+
+### LED Driver (<code>led_rmt.rs</code>) ### {#led-driver}
+
+Manages four RMT DMA channels, one per LED panel. Each channel drives
+256 WS2812B LEDs at 800kHz. Frames are generated by the pattern engine
+(procedural noise, keyframe interpolation, or bitmap playback).
+
+<figure>
+  <img src="diagrams/img/led-subsystem.svg" alt="LED subsystem detail">
+  <figcaption>LED subsystem: pattern engine, frame buffer, and RMT DMA</figcaption>
+</figure>
+
+<strong>Performance Budget:</strong>
+- Per-LED transmission time: 30µs (24 bits @ 1.25µs/bit)
+- Per-chain (256 LEDs): 7.68ms
+- 4-ch parallel (DMA concurrent): ~7.68ms/frame
+- Target refresh: 30 FPS (33ms period — ample headroom)
+
+<strong>Pattern Types:</strong>
+1. Static fill: solid color, brightness 0–255
+2. Procedural noise: fire, plasma, rain effects (inline PRNG)
+3. Keyframe animation: 8 frames @ 100ms each
+4. Bitmap playback: raw RGB frame data from SD (12 frames/second)
+
+### Audio Player (<code>audio_i2s.rs</code>) ### {#audio-player}
+
+Manages I2S DMA output to the MAX98357A amplifier. Audio data is read
+from the SD card in chunks and fed into a double-buffered DMA ring.
+The mixer supports per-face panning for spatial audio effects (future
+multi-speaker expansion).
+
+<figure>
+  <img src="diagrams/img/audio-pipeline.svg" alt="Audio playback pipeline">
+  <figcaption>Audio pipeline from request to speaker output</figcaption>
+</figure>
+
+<strong>Audio Format:</strong>
+- Sample rate: 16kHz
+- Bit depth: 16-bit signed integer (i16)
+- Channels: 1 (mono, panned in software)
+- Storage: raw PCM (no header) for minimal decode overhead
+
+<strong>DMA Configuration:</strong>
+- Buffer size: 16KB total, split into two 8KB half-buffers
+- Half-buffer duration: 256ms (@ 16kHz mono 16-bit)
+- IRQ on half-transfer and full-transfer for refill
+- Target underrun rate: &lt;1%
+
+### Voice Pipeline (<code>voice_pdm.rs</code>) ### {#voice-pipeline}
+
+Implements on-device keyword spotting with two stages: Voice Activity
+Detection (VAD) to gate processing, and Goertzel algorithm for keyword
+frequency detection.
+
+<figure>
+  <img src="diagrams/img/voice-pipeline.svg" alt="Voice pipeline">
+  <figcaption>Voice pipeline: PDM capture → VAD gate → Goertzel KWS</figcaption>
+</figure>
+
+<strong>PDM Capture:</strong>
+- I2S peripheral in PDM RX mode
+- 64× decimation: 1.024MHz PDM → 16kHz PCM
+- Frame size: 20ms (320 samples)
+
+<strong>VAD (WebRTC VAD-RS):</strong>
+- Algorithm: Gaussian Mixture Model (fixed-point)
+- Aggressiveness: mode 2 (balanced)
+- Flash cost: ~5KB code + 1KB data
+- CPU: ~1% when active
+
+<strong>Goertzel Keyword Spotting:</strong>
+- Fixed-point Q15 arithmetic (no float/alloc)
+- Per keyword: 2–4 frequency bins with per-bin thresholds
+- Keyword configuration stored on SD, updatable via BLE
+- Flash cost: ~7KB code + 0.5KB state
+- CPU: ~0.5% average (VAD-gated, runs only during speech)
+- Latency: &lt;100ms from end of keyword to event dispatch
+
+Example keyword configuration (JSON on SD):
+
+```json
+{
+  "keywords": [
+    {"id": 0, "label": "fire", "bins": [350, 700, 1400], "threshold": 4096},
+    {"id": 1, "label": "thunder", "bins": [80, 160, 320], "threshold": 5000},
+    {"id": 2, "label": "dragon", "bins": [400, 900, 1500, 2000], "threshold": 3500}
+  ]
+}
+```
+
+### BLE GATT Server (<code>ble_gatt.rs</code>) ### {#ble-gatt}
+
+Implements a BLE peripheral with three GATT services. The stack uses
+<code>trouble-host</code> (formerly <code>bt-hci</code>) for BLE.
+
+<figure>
+  <img src="diagrams/img/ble-protocol.svg" alt="BLE protocol sequence">
+  <figcaption>BLE GATT protocol: advertisement, services, and upload flow</figcaption>
+</figure>
+
+#### Service 1: Control Service (UUID: 0000FFE0-…) #### {#ble-control}
+
+<table>
+  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>CMD</td><td>FFE1</td><td>Write</td><td>Trigger playback, set volume, etc.</td></tr>
+    <tr><td>STATUS</td><td>FFE2</td><td>Notify</td><td>Playing state, battery, errors</td></tr>
+    <tr><td>CONFIG</td><td>FFE3</td><td>Write, Read</td><td>Keyword map, settings</td></tr>
+  </tbody>
+</table>
+
+CMD payload (JSON-like, max 64B):
+
+```json
+{"cmd":"play","id":0,"face":1,"volume":80}
+```
+
+STATUS notification:
+
+```json
+{"state":"playing","id":0,"progress":75,"battery":0,"rssi":-50}
+```
+
+#### Service 2: Upload Service (UUID: 0000FFE1-…) #### {#ble-upload}
+
+<table>
+  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>START</td><td>FFE4</td><td>Write</td><td>File metadata (id, name, length)</td></tr>
+    <tr><td>CHUNK</td><td>FFE5</td><td>Write</td><td>512B raw data chunk</td></tr>
+    <tr><td>DONE</td><td>FFE6</td><td>Write</td><td>Finalize upload + keyword mapping</td></tr>
+    <tr><td>LIST</td><td>FFE7</td><td>Read, Notify</td><td>List of sounds on SD with free space</td></tr>
+  </tbody>
+</table>
+
+#### Service 3: LED Patterns (UUID: 0000FFE2-…) #### {#ble-patterns}
+
+<table>
+  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>PATTERN</td><td>FFE8</td><td>Write</td><td>Compressed LED frame data</td></tr>
+    <tr><td>PATTERN_LIST</td><td>FFE9</td><td>Read, Notify</td><td>List of stored patterns</td></tr>
+  </tbody>
+</table>
+
+### Wi-Fi Server (<code>wifi_server.rs</code>) ### {#wifi-server}
+
+The Wi-Fi server is conditionally started by the companion app via a
+BLE command. It provides:
+
+1. <strong>HTTP GET <code>/sounds/{id}</code></strong>: Stream a sound file from SD
+2. <strong>HTTP POST <code>/upload</code></strong>: Receive a sound file bulk upload
+3. <strong>WebSocket <code>/ws</code></strong>: Bidirectional streaming for control + audio
+
+Wi-Fi is disabled by default to save power. Enable sequence:
+
+1. App sends BLE <code>CMD</code> with Wi-Fi credentials
+2. Cube connects, starts HTTP server on port 8080
+3. Cube notifies its IP address via BLE <code>STATUS</code>
+4. App connects via Wi-Fi for bulk operations
+
+### SD Card FS (<code>sd_fs.rs</code>) ### {#sd-fs}
+
+Manages the FAT32 filesystem on the microSD card via SPI. Directory
+structure:
+
+```
+/sounds/
+  0.pcm         # Sound ID 0 (raw PCM 16-bit mono 16kHz)
+  1.pcm         # Sound ID 1
+  ...
+  config.json   # Sound metadata (name, keyword mapping)
+/patterns/
+  0.bin         # LED pattern ID 0 (raw RGB frames)
+  1.bin
+  ...
+/kw_config.json # Keyword spotter configuration
+```
+
+Operations: <code>read(id)</code>, <code>write(id, data)</code>, <code>list()</code>, <code>delete(id)</code>,
+<code>free_space()</code>.
+
+### Button Handler (<code>btn_mon.rs</code>) ### {#button-handler}
+
+Two buttons via GPIO interrupts with software debounce:
+
+<table>
+  <thead><tr><th>Button</th><th>Press (&lt;1s)</th><th>Hold (1–3s)</th><th>Hold (&gt;3s)</th></tr></thead>
+  <tbody>
+    <tr><td>Power (GPIO0)</td><td>Toggle LED on/off</td><td>Volume mute</td><td>Deep sleep</td></tr>
+    <tr><td>Volume (GPIO1)</td><td>Cycle volume (0% → 25% → 50% → 75% → 100%)</td><td>—</td><td>Factory reset</td></tr>
+  </tbody>
+</table>
+
+### Battery Monitor (<code>batt_mon.rs</code>) ### {#battery-monitor}
+
+Reads battery voltage via ADC (voltage divider). For MVP
+(breadboard/USB-powered), this monitors the USB 5V rail presence as
+a proxy. The battery LED blinks patterns:
+
+- Solid green: powered, idle
+- Pulsing blue: BLE connected
+- Fast blink orange: uploading
+- Slow blink red: error/overheat
+
+# Companion App Specification # {#companion-app}
+
+<em>This section is normative.</em>
+
+## Technology Stack ## {#app-stack}
+
+The companion app is built with <strong>Dioxus</strong>, a Rust reactive UI
+framework, compiled to native desktop (via WGPU) and mobile (via
+platform WebView). Platform targets:
+
+<table>
+  <thead><tr><th>Platform</th><th>Renderer</th><th>Phase</th></tr></thead>
+  <tbody>
+    <tr><td>Linux</td><td>Dioxus Desktop</td><td>MVP</td></tr>
+    <tr><td>macOS</td><td>Dioxus Desktop</td><td>MVP</td></tr>
+    <tr><td>Windows</td><td>Dioxus Desktop</td><td>MVP</td></tr>
+    <tr><td>Android</td><td>Dioxus Mobile</td><td>Post-MVP</td></tr>
+    <tr><td>iOS</td><td>Dioxus Mobile</td><td>Post-MVP</td></tr>
+  </tbody>
+</table>
+
+Dependencies: <code>dioxus</code>, <code>btleplug</code> (cross-platform BLE), <code>reqwest</code>
+(HTTP/WebSocket), <code>cpal</code> (local audio preview), <code>serde</code>/<code>serde_json</code>.
+
+## Features ## {#app-features}
+
+### Sound Bank Management ### {#app-soundbank}
+
+The app manages collections of sounds called "Sound Banks". A sound
+bank is a JSON manifest referencing local audio files:
+
+```json
+{
+  "name": "D&D Fire Module",
+  "author": "gm_alice",
+  "version": 1,
+  "sounds": [
+    {"id": 0, "path": "fire_ignite.pcm", "keyword": "fire", "led_pattern": "fire"},
+    {"id": 1, "path": "explosion.pcm", "keyword": "thunder", "led_pattern": "explosion"}
+  ]
+}
+```
+
+Sound banks can be exported to files, imported from others, and
+shared via the companion app hub (post-MVP marketplace).
+
+### Cube Management ### {#app-cube}
+
+- <strong>BLE Scanning</strong>: Discover nearby CubeMaster devices
+- <strong>Connection Management</strong>: Pair, connect, disconnect
+- <strong>Sound Upload</strong>: Select a sound bank → upload all files via BLE or
+    Wi-Fi bulk
+- <strong>Keyword Configuration</strong>: Assign keywords to sounds, adjust
+    detection thresholds
+- <strong>LED Preview</strong>: Preview LED patterns on a simulated cube face
+- <strong>Live Control</strong>: Trigger sounds manually, adjust volume, play
+    sequences
+- <strong>Cube Status</strong>: Battery level, SD free space, firmware version,
+    Wi-Fi status
+
+### Sound Pack Hub (Post-MVP) ### {#app-hub}
+
+A community hub for sharing and discovering sound packs. Sound packs
+include audio files, LED patterns, and keyword configurations. The hub
+supports browsing, downloading, rating, and remixing packs.
+
+## App-Firmware Communication Flow ## {#app-comm-flow}
+
+<strong>Connection sequence:</strong>
+
+1. App scans for BLE devices advertising "CubeMaster-XXXX"
+2. App connects, negotiates MTU 512
+3. App reads STATUS characteristic for cube state
+4. If Wi-Fi desired, app sends Wi-Fi credentials via BLE CMD
+5. Cube connects to Wi-Fi and notifies its IP via BLE STATUS
+
+<strong>Upload sequence (BLE, small files):</strong>
+
+1. App writes START characteristic with file metadata
+2. App iterates CHUNK writes (512B each)
+3. App writes DONE with keyword mapping
+4. Cube acknowledges via STATUS notification
+
+<strong>Upload sequence (Wi-Fi, large files):</strong>
+
+1. App sends HTTP POST to <code>/upload</code> on cube's Wi-Fi IP
+2. Cube streams file to SD, returns 200 OK
+3. App sends keyword mapping via BLE CONFIG write
+
+## UI Components ## {#app-ui}
+
+### Main Views ### {#app-views}
+
+<dl>
+  <dt>Sound Bank View</dt>
+  <dd>
+    Browse local sound banks, create new banks, import/export. Shows
+    a grid of sound banks with metadata (name, sound count, size).
+  </dd>
+
+  <dt>Cube View</dt>
+  <dd>
+    Connected cube status dashboard. Shows BLE signal strength, SD
+    free space, current configuration, and playback state.
+  </dd>
+
+  <dt>Editor View</dt>
+  <dd>
+    Assign keywords to sounds, fine-tune VAD thresholds, map LED
+    patterns to sounds, configure sequences.
+  </dd>
+
+  <dt>Live Control View</dt>
+  <dd>
+    Big trigger buttons for each sound, volume slider, panic button
+    (stop all), ambiance mode toggle.
+  </dd>
+
+  <dt>Hub View (Post-MVP)</dt>
+  <dd>
+    Browse community sound packs, download, rate, and share.
+  </dd>
+</dl>
+
+# Protocol Specification # {#protocol}
+
+<em>This section is normative.</em>
+
+## BLE Message Format ## {#ble-protocol}
+
+All BLE messages use a compact binary-wrapped JSON format. The first
+byte identifies the message type, followed by a JSON payload:
+
+```
+[type: u8][json_payload: N bytes]
+```
+
+Message types:
+
+<table>
+  <thead><tr><th>Type</th><th>Name</th><th>Direction</th><th>Description</th></tr></thead>
+  <tbody>
+    <tr><td>0x01</td><td>CMD_PLAY</td><td>App → Cube</td><td>Trigger sound playback</td></tr>
+    <tr><td>0x02</td><td>CMD_STOP</td><td>App → Cube</td><td>Stop current playback</td></tr>
+    <tr><td>0x03</td><td>CMD_VOLUME</td><td>App → Cube</td><td>Set volume 0–100</td></tr>
+    <tr><td>0x04</td><td>CMD_WIFI_CONFIG</td><td>App → Cube</td><td>SSID + password</td></tr>
+    <tr><td>0x05</td><td>STATUS_UPDATE</td><td>Cube → App</td><td>Periodic status</td></tr>
+    <tr><td>0x06</td><td>UPLOAD_START</td><td>App → Cube</td><td>Begin file upload</td></tr>
+    <tr><td>0x07</td><td>UPLOAD_CHUNK</td><td>App → Cube</td><td>Data chunk</td></tr>
+    <tr><td>0x08</td><td>UPLOAD_DONE</td><td>App → Cube</td><td>Finalize upload</td></tr>
+    <tr><td>0x09</td><td>CONFIG_KW</td><td>App → Cube</td><td>Update keyword settings</td></tr>
+  </tbody>
+</table>
+
+## Wi-Fi HTTP API ## {#wifi-api}
+
+The cube's HTTP server listens on port 8080.
+
+<dl>
+  <dt><code>GET /status</code></dt>
+  <dd>
+    Returns JSON cube status:
+    <code>{"firmware":"0.1.0","uptime":12345,"sd_free":524288000,"ble_clients":1,"playing":null}</code>
+  </dd>
+
+  <dt><code>GET /sounds</code></dt>
+  <dd>
+    Returns JSON array of sound metadata:
+    <code>[{"id":0,"name":"fire","size":40000,"keyword":"fire"}, ...]</code>
+  </dd>
+
+  <dt><code>GET /sounds/{id}</code></dt>
+  <dd>
+    Streams raw PCM data with <code>Content-Type: audio/pcm16</code>.
+    Supports <code>Range</code> header for seeking.
+  </dd>
+
+  <dt><code>POST /upload</code></dt>
+  <dd>
+    Accepts multipart form data with fields: <code>file</code> (raw PCM),
+    <code>name</code>, <code>keyword</code>, <code>pattern_id</code>.
+    Returns <code>{"id": 3, "size": 40000}</code>.
+  </dd>
+
+  <dt><code>DELETE /sounds/{id}</code></dt>
+  <dd>
+    Deletes a sound from SD. Returns 204.
+  </dd>
+
+  <dt>WebSocket /ws</dt>
+  <dd>
+    Bidirectional control channel. Messages are JSON frames with type
+    and payload. Supports real-time playback commands and status streaming.
+  </dd>
+</dl>
+
+# Performance Budget # {#performance}
+
+## Resource Limits ## {#resource-limits}
+
+<table>
+  <thead><tr><th>Resource</th><th>Budget</th><th>Measured/Target</th></tr></thead>
+  <tbody>
+    <tr><td>Flash</td><td>&lt;1MB</td><td>Firmware target ~500KB</td></tr>
+    <tr><td>RAM (static)</td><td>&lt;50KB</td><td>Buffers + stacks ~32KB</td></tr>
+    <tr><td>CPU (Core 0)</td><td>&lt;60%</td><td>LED DMA + I2S DMA &lt;30%</td></tr>
+    <tr><td>CPU (Core 1)</td><td>&lt;60%</td><td>BLE poll + Voice &lt;20%</td></tr>
+    <tr><td>BLE throughput</td><td>~20KB/s</td><td>Upload 40KB = 2s</td></tr>
+    <tr><td>Wi-Fi throughput</td><td>~1MB/s</td><td>Upload 1MB = 1s</td></tr>
+    <tr><td>LED refresh</td><td>30 FPS target</td><td>Parallel DMA ~100 FPS max</td></tr>
+    <tr><td>Audio latency</td><td>&lt;100ms</td><td>DMA buffer = 256ms half</td></tr>
+    <tr><td>Voice latency</td><td>&lt;100ms</td><td>VAD 5ms + Goertzel 2ms</td></tr>
+    <tr><td>BLE range</td><td>&gt;10m indoor</td><td>BLE 5.0 coded PHY</td></tr>
+    <tr><td>Power (USB)</td><td>&lt;2.5A @5V</td><td>Peak 5.5A limited to 2.5A</td></tr>
+  </tbody>
+</table>
+
+## Firmware Size Budget ## {#size-budget}
+
+<table>
+  <thead><tr><th>Component</th><th>Flash</th><th>RAM</th></tr></thead>
+  <tbody>
+    <tr><td>esp-hal + RTOS</td><td>120KB</td><td>8KB</td></tr>
+    <tr><td>Embassy executor</td><td>30KB</td><td>4KB</td></tr>
+    <tr><td>BLE stack (trouble-host)</td><td>150KB</td><td>8KB</td></tr>
+    <tr><td>Wi-Fi stack</td><td>80KB</td><td>6KB</td></tr>
+    <tr><td>LED driver</td><td>8KB</td><td>4KB</td></tr>
+    <tr><td>Audio driver</td><td>12KB</td><td>18KB</td></tr>
+    <tr><td>Voice (VAD+KWS)</td><td>12KB</td><td>2KB</td></tr>
+    <tr><td>SD FS</td><td>20KB</td><td>4KB</td></tr>
+    <tr><td>Supervisor + Utils</td><td>20KB</td><td>4KB</td></tr>
+    <tr><td><b>Total</b></td><td><b>~452KB</b></td><td><b>~58KB</b></td></tr>
+  </tbody>
+</table>
+
+# Security Considerations # {#security}
+
+<em>This section is non-normative.</em>
+
+- BLE pairing: Just Works for MVP. Future versions should implement
+    numeric comparison pairing for production.
+- Wi-Fi credentials: Stored in plaintext on the cube's NVS partition.
+    Consider encrypting with a device-specific key in production.
+- HTTP server: No authentication. Only accessible on the local network
+    segment. Consider adding a simple pre-shared key for production.
+- SD card: No encryption. Sound files are user-generated content with
+    no sensitive data.
+
+# Post-MVP Features # {#post-mvp}
+
+The following features are deferred to post-MVP development cycles:
+
+1. <strong>Mood Engine</strong>: Ambient-reactive mode that autonomously plays
+    background ambiance based on time, detected activity level, or
+    a game master's scenario cues.
+2. <strong>Sound Pack Marketplace</strong>: In-app hub for discovering, rating,
+    and sharing community-created sound packs.
+3. <strong>Multi-Cube Sync</strong>: Multiple CubeMaster devices synchronized for
+    immersive multi-directional audio and lighting (e.g., D&amp;D table).
+4. <strong>Ambient Reactive Mode</strong>: Continuous environmental monitoring
+    (light level, sound level) to auto-adjust cube ambiance.
+5. <strong>TTS Engine</strong>: Text-to-speech synthesis for dynamic narration,
+    eliminating the need for pre-recorded dialogue.
+6. <strong>Battery Management</strong>: Full USB-C PD charging, 3S LiPo BMS, power
+    path management, deep sleep optimization.
+7. <strong>Custom PCB</strong>: JLCPCB-fabricated custom mainboard replacing the
+    breadboard + dev kit prototype.
+8. <strong>3D-Printed Enclosure</strong>: 200mm cube frame with frosted acrylic
+    diffusers and speaker grilles.
+9. <strong>Mobile Companion App</strong>: Dioxus Mobile builds for Android and iOS.
+
+# Conformance # {#conformance}
+
+There is only one class of product: the CubeMaster.
+
+## Conformance Classes ## {#conformance-classes}
+
+A product implementing the CubeMaster firmware MUST:
+
+- Advertise as a BLE peripheral with the device name prefix
+    "CubeMaster-"
+- Implement the three GATT services defined in [[#ble-gatt]]
+- Accept PCM 16-bit mono 16kHz audio data via both BLE upload and
+    Wi-Fi HTTP POST
+- Detect keywords per the Goertzel configuration stored on SD
+- Drive WS2812B LEDs via RMT DMA at the configured pinout
+- Output audio via I2S DMA to a MAX98357A or equivalent amplifier
+
+A product implementing the CubeMaster companion app MUST:
+
+- Discover and connect to CubeMaster BLE peripherals
+- Upload sound files via the defined BLE upload protocol
+- Configure keyword-to-sound mappings on the cube
+- Support manual sound triggering from the UI
+- Operate on at least one desktop platform (Linux, macOS, or Windows)

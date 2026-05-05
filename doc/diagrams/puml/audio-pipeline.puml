@@ -1,0 +1,61 @@
+@startuml audio-pipeline
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam noteBackgroundColor #FFFFEE
+
+title Audio Playback Pipeline
+
+rectangle "Audio Request" as req #LightBlue
+note right of req
+  Trigger source:
+  · Voice keyword detected
+  · BLE CMD from app
+  · Button press
+end note
+
+rectangle "Sound Manager" as mgr #LightGreen
+
+database "SD Card" as sd
+
+rectangle "PCM Decoder" as decode #LightYellow
+note right of decode
+  Supported formats:
+  · Raw PCM 16-bit mono 16kHz
+  · Optional: WAV header skip
+  No codec libs — minimal flash
+end note
+
+rectangle "Mixer / Panner" as mix #LightCoral
+note right of mix
+  4-channel spatial mix
+  Stereo L/R → face pairs:
+  · Face 0+2 = Left channel
+  · Face 1+3 = Right channel
+  Gain: 0.0–1.0 per face
+end note
+
+rectangle "DMA Ring Buffer\n(16KB split)" as dma #Lavender
+note right of dma
+  Double buffered:
+  · Half-0: 8KB
+  · Half-1: 8KB
+  IRQ triggers refill on
+  half/full events
+end note
+
+rectangle "I2S Peripheral\n(ESP32-S3)" as i2s #Wheat
+
+rectangle "MAX98357A\nAmplifier" as amp
+
+rectangle "Speaker\n(3W 4Ω)" as spk
+
+req --> mgr : play_sound(id, vol, pan)
+mgr --> sd : read "sounds/{id}.pcm"
+sd --> decode : raw bytes
+decode --> mix : PCM samples
+mix --> dma : stereo interleaved i16
+dma --> i2s : DMA transfer
+i2s --> amp : BCLK / LRCLK / DATA
+amp --> spk : amplified audio
+
+@enduml

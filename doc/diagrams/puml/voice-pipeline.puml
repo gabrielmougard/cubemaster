@@ -1,0 +1,67 @@
+@startuml voice-pipeline
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam noteBackgroundColor #FFFFEE
+
+title Voice Pipeline — Keyword Spotting
+
+rectangle "PDM Microphone\n(MP34DT06)" as mic
+
+rectangle "PDM → PCM\nDecimation Filter" as filter #LightBlue
+note right of filter
+  ESP32-S3 I2S in PDM RX mode
+  64× decimation:
+  · Input: PDM @ 1.024 MHz
+  · Output: PCM 16-bit @ 16 kHz
+end note
+
+rectangle "DMA Buffer\n20ms frames (320 samples)" as dma #LightYellow
+
+rectangle "VAD\n(WebRTC VAD-RS)" as vad #LightGreen
+note right of vad
+  Frame: 20ms @ 16kHz
+  Modes: 0–3 (aggressiveness)
+  Mode 2 used (balanced)
+  CPU: ~1%
+  Flash: +5KB
+  RAM: +1KB
+end note
+
+rectangle "Goertzel KWS\n(Keyword Spotter)" as goertzel #LightCoral
+note right of goertzel
+  Fixed-point Q15 math
+  Per keyword: 2–4 frequency bins
+  Configurable via BLE
+  Flash: +7KB
+  RAM: +0.5KB
+  CPU: ~0.5% avg (gated)
+  
+  Example: "fire"
+  Bins: 350Hz, 700Hz, 1400Hz
+  Threshold: magnitude > 0x1000
+end note
+
+database "Keyword Config\n(from SD/Flash)" as config
+
+rectangle "Event Dispatcher" as event #Wheat
+
+mic --> filter : PDM bitstream
+filter --> dma : PCM i16
+dma --> vad : 20ms frame
+
+vad --> goertzel : voice frame (if speech detected)
+vad --> dma : silence (discard frame)
+
+config --> goertzel : frequencies + thresholds
+
+goertzel --> event : keyword_id, confidence
+event --> [Main Supervisor] : Trigger sound + light
+
+note bottom of vad
+  VAD Gate advantage:
+  · 90% CPU reduction vs. continuous KWS
+  · Reduces false positives
+  · Only processes actual speech
+end note
+
+@enduml

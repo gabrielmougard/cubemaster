@@ -1,0 +1,38 @@
+version: '3'
+
+vars:
+  BS_FILE: cubemaster-mvp.bs
+  HTML_FILE: cubemaster-mvp.html
+  DOC_DIR: doc
+
+tasks:
+  default:
+    desc: Build diagrams and spec
+    cmds:
+      - task: spec
+
+  spec:
+    desc: Compile Bikeshed .bs -> .html
+    dir: '{{.DOC_DIR}}'
+    cmds:
+      - bikeshed spec {{.BS_FILE}} {{.HTML_FILE}}
+
+  serve:
+    desc: Build and open in browser
+    cmds:
+      - task: spec
+      - cmd: |
+          if command -v xdg-open >/dev/null 2>&1; then
+            xdg-open {{.DOC_DIR}}/{{.HTML_FILE}}
+          elif command -v open >/dev/null 2>&1; then
+            open {{.DOC_DIR}}/{{.HTML_FILE}}
+          else
+            echo "Open {{.DOC_DIR}}/{{.HTML_FILE}} in your browser"
+          fi
+        silent: true
+
+  clean:
+    desc: Remove generated output
+    cmds:
+      - rm -f {{.DOC_DIR}}/{{.HTML_FILE}}
+      - rm -f {{.DOC_DIR}}/diagrams/img/*.svg

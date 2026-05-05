@@ -1,0 +1,67 @@
+@startuml led-subsystem
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam noteBackgroundColor #FFFFEE
+
+title LED Subsystem — 4× 16×16 WS2812B Panels
+
+rectangle "Pattern Request" as req #LightBlue
+
+rectangle "Pattern Engine" as engine #LightGreen
+note bottom of engine
+  Pattern types:
+  · Static color fill
+  · Procedural noise (fire, plasma)
+  · Keyframe animation
+  · Bitmap from SD/upload
+end note
+
+database "SD Card" as sd
+
+rectangle "Frame Buffer\n4 × 768 bytes" as buf #LightYellow
+note bottom of buf
+  One frame = 256 LEDs × 3 bytes (RGB)
+  Total: 3072 bytes (static)
+  Double buffered for smooth transitions
+end note
+
+rectangle "RMT Channel 0\nGPIO26" as rmt0 #Lavender
+rectangle "RMT Channel 1\nGPIO27" as rmt1 #Lavender
+rectangle "RMT Channel 2\nGPIO33" as rmt2 #Lavender
+rectangle "RMT Channel 3\nGPIO34" as rmt3 #Lavender
+
+rectangle "Level Shifter\n74AHCT125" as ls
+
+rectangle "Panel 0\n256 WS2812B\n(Face 0)" as p0 #LightPink
+rectangle "Panel 1\n256 WS2812B\n(Face 1)" as p1 #LightPink
+rectangle "Panel 2\n256 WS2812B\n(Face 2)" as p2 #LightPink
+rectangle "Panel 3\n256 WS2812B\n(Face 3)" as p3 #LightPink
+
+req --> engine : play_pattern(id, face, speed)
+engine --> sd : read pattern data (optional)
+engine --> buf : generate frame
+buf --> rmt0 : DMA frame[0]
+buf --> rmt1 : DMA frame[1]
+buf --> rmt2 : DMA frame[2]
+buf --> rmt3 : DMA frame[3]
+
+rmt0 --> ls
+rmt1 --> ls
+rmt2 --> ls
+rmt3 --> ls
+
+ls --> p0 : DIN
+ls --> p1 : DIN
+ls --> p2 : DIN
+ls --> p3 : DIN
+
+note right of buf
+  Timing:
+  · Per LED: 30µs @ 800kHz
+  · Per chain (256): 7.68ms
+  · 4-ch parallel: ~7.68ms total/frame
+  · Max rate: ~130 FPS
+  · Target: 30 FPS
+end note
+
+@enduml

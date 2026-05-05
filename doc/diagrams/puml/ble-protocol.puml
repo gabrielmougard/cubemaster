@@ -1,0 +1,60 @@
+@startuml ble-protocol
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title BLE GATT Protocol — Cube ↔ Companion App
+
+actor "App" as app
+participant "GATT Server\n(ESP32-S3)" as cube
+
+== Advertising & Connection ==
+cube -> app : Advertisement ("CubeMaster-XXXX")
+app -> cube : Connect (MTU=512)
+
+== Control Service ==
+note right of cube
+  UUID: 0000FFE0-0000-1000-8000-00805F9B34FB
+  Chars:
+    · CMD (Write): trigger playback
+    · STATUS (Notify): cube state
+    · CONFIG (Write/Read): keyword map
+end note
+
+app -> cube : CMD.Write {\"cmd\":\"play\",\"id\":0,\"face\":1,\"volume\":80}
+cube --> app : STATUS.Notify {\"playing\":0,\"progress\":50}
+
+== Upload Service ==
+note right of cube
+  UUID: 0000FFE1-0000-1000-8000-00805F9B34FB
+  Chars:
+    · START (Write): file metadata
+    · CHUNK (Write): raw PCM bytes
+    · DONE (Write): finalize + map keyword
+    · LIST (Read/Notify): sound index
+end note
+
+app -> cube : START.Write {\"id\":0,\"name\":\"fire.wav\",\"len\":40000}
+cube --> cube : Open \"sounds/0.pcm\" on SD
+loop while chunks remain
+  app -> cube : CHUNK.Write [512 bytes]
+end
+app -> cube : DONE.Write {\"id\":0,\"keyword\":\"fire\",\"led\":\"red_burst\"}
+cube --> cube : Close file, update keyword map
+cube --> app : LIST.Notify {\"sounds\":[\"fire\",\"thunder\"],\"free\":524288000}
+
+== LED Pattern Upload ==
+note right of cube
+  UUID: 0000FFE2-0000-1000-8000-00805F9B34FB
+  Chars:
+    · PATTERN (Write): compressed bitmap
+    · PATTERN_LIST (Read/Notify): pattern index
+end note
+
+app -> cube : PATTERN.Write {\"id\":0,\"name\":\"fire\",\"data\":[...]}
+
+== Disconnection ==
+app -> cube : Disconnect
+cube -> app : Start advertising
+
+@enduml

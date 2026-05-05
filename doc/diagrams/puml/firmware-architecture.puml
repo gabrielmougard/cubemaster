@@ -1,0 +1,54 @@
+@startuml firmware-architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam componentBorderColor #333333
+skinparam noteBackgroundColor #FFFFEE
+
+title CubeMaster MVP — Firmware Module Architecture
+
+component "Main Supervisor" as main #LightBlue {
+  portin "ble_cmd" as ble_in
+  portin "voice_event" as voice_in
+  portout "led_cmd" as led_out
+  portout "audio_cmd" as audio_out
+  portout "http_cmd" as http_out
+}
+
+component "BLE GATT Server\n(esp-radio)" as ble #LightGreen {
+  port "control_chars" as gatt
+  port "upload_chars" as upload
+}
+
+component "Wi-Fi Server\n(embassy-net)" as wifi #LightYellow {
+  port "REST API" as rest
+  port "WebSocket" as ws
+}
+
+component "LED Driver\n(RMT DMA × 4)" as led #LightPink
+
+component "Audio Player\n(I2S DMA)" as audio #LightCoral
+
+component "Voice Pipeline\n(PDM → VAD → Goertzel)" as voice #Lavender
+
+component "SD Card FS\n(embedded-sdmmc)" as sd #LightGray
+
+component "Button Handler\n(GPIO IRQ)" as btn #Wheat
+
+component "Battery Monitor\n(ADC)" as batt #Wheat
+
+main --> led : play_pattern(id, face)
+main --> audio : play_sound(id, volume, pan)
+main --> ble : notify status
+main --> wifi : stream/respond
+main --> sd : read_sound(id)
+
+ble --> main : trigger/cfg
+wifi --> main : upload/stream
+voice --> main : keyword detected
+btn --> main : press event
+batt --> main : level changed
+
+voice --> sd : read keyword config
+led --> sd : read pattern data
+
+@enduml
