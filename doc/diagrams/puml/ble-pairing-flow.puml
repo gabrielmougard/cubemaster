@@ -1,0 +1,62 @@
+@startuml ble-pairing-flow
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam sequenceMessageAlign center
+
+title BLE pairing and rename flow, CubeInfo GATT Service
+
+actor "Companion App\n(btleplug)" as app
+participant "BLE Peripheral\n(ESP32-S3 / trouble-host)" as cube
+
+== Device Discovery ==
+cube -> app : Advertisement (16-bit UUID **0xCBFF**,\ndevice name "CubeMaster")
+note right of cube
+  Advertising PDU includes:
+  · 16-bit service UUID 0xCBFF
+  · Local name (user-configurable)
+  · TX Power level
+end note
+
+app -> app : Filter scan results\nby service UUID 0xCBFF
+
+== Connection ==
+app -> cube : Connect
+app -> cube : Negotiate MTU 247
+app -> cube : Discover GATT Services
+
+note right of cube
+  **CubeInfo Service**
+  UUID: c0bea577-0000-4000-8000-00000000f001
+
+  Characteristics:
+  ├─ cube_name  (UUID: ...f004) [Read+Write] [u8;32]
+  ├─ status     (UUID: ...ffe2) [Read+Notify] u8
+  ├─ wifi_ssid  (UUID: ...f011) [Write]       [u8;32]
+  └─ wifi_pass  (UUID: ...f012) [Write]       [u8;32]
+end note
+
+== Rename Flow ==
+app -> cube : Read cube_name → "CubeMaster"
+app -> cube : Write cube_name ← "MyDnDCube" (UTF-8 bytes)
+cube -> cube : Update advertising name\nin RAM
+
+== WiFi Provisioning ==
+app -> cube : Write wifi_ssid ← "HomeNetwork" (UTF-8 bytes)
+app -> cube : Write wifi_pass ← "s3cr3t!" (UTF-8 bytes)
+cube -> cube : Store credentials\n(RAM only, not yet NVS)
+
+== Status Notification ==
+cube --> app : status.Notify (connection state change)
+
+== Disconnect & Re-advertise ==
+app -> cube : Disconnect
+cube -> cube : Resume advertising with\nnew name "MyDnDCube"
+
+== Subsequent Discovery ==
+cube -> app : Advertisement (UUID 0xCBFF,\nname "MyDnDCube")
+note over app
+  App recognizes the device
+  by UUID 0xCBFF, not by name
+end note
+
+@enduml

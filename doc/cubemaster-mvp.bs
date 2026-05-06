@@ -1,11 +1,11 @@
 <pre class="metadata">
-Title: CubeMaster MVP — Firmware & System Specification
+Title: CubeMaster MVP. Firmware and system specification
 Shortname: cubemaster-mvp
 Editor: CubeMaster Team
 Status: DREAM
 Assume Explicit For: yes
-Repository: cubemaster/cubemaster
-URL: https://cubemaster.github.io/cubemaster/
+Repository: gabrielmougard/cubemaster
+URL: https://gabrielmougard.github.io/cubemaster/
 Work Status: exploring
 Abstract: |
   This document defines the engineering specification for the
@@ -389,58 +389,62 @@ Example keyword configuration (JSON on SD):
 
 ### BLE GATT Server (<code>ble_gatt.rs</code>) ### {#ble-gatt}
 
-Implements a BLE peripheral with three GATT services. The stack uses
-<code>trouble-host</code> (formerly <code>bt-hci</code>) for BLE.
+Implements a BLE peripheral with a single GATT service for device
+configuration and WiFi provisioning. The stack uses
+<code>trouble-host</code> 0.6.0 with the <code>#[gatt_server]</code> and
+<code>#[gatt_service]</code> derive macros for compile-time GATT table
+generation.
 
 <figure>
-  <img src="diagrams/img/ble-protocol.svg" alt="BLE protocol sequence">
-  <figcaption>BLE GATT protocol: advertisement, services, and upload flow</figcaption>
+  <img src="diagrams/img/ble-pairing-flow.svg" alt="BLE pairing and rename flow">
+  <figcaption>BLE pairing flow: discovery via 16-bit UUID, rename, and WiFi provisioning</figcaption>
 </figure>
 
-#### Service 1: Control Service (UUID: 0000FFE0-…) #### {#ble-control}
+#### CubeInfo Service (UUID: c0bea577-0000-4000-8000-00000000f001) #### {#ble-cubeinfo}
 
 <table>
-  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
+  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Type</th><th>Description</th></tr></thead>
   <tbody>
-    <tr><td>CMD</td><td>FFE1</td><td>Write</td><td>Trigger playback, set volume, etc.</td></tr>
-    <tr><td>STATUS</td><td>FFE2</td><td>Notify</td><td>Playing state, battery, errors</td></tr>
-    <tr><td>CONFIG</td><td>FFE3</td><td>Write, Read</td><td>Keyword map, settings</td></tr>
+    <tr><td>cube_name</td><td>c0bea577-0000-4000-8000-00000000f004</td><td>Read, Write</td><td>[u8; 32]</td><td>User-friendly device name (UTF-8, null-padded)</td></tr>
+    <tr><td>status</td><td>c0bea577-0000-4000-8000-0000000fffe2</td><td>Read, Notify</td><td>u8</td><td>Connection status (0=idle, 1=connected, 2=provisioning)</td></tr>
+    <tr><td>wifi_ssid</td><td>c0bea577-0000-4000-8000-00000000f011</td><td>Write</td><td>[u8; 32]</td><td>WiFi network name (UTF-8, null-padded)</td></tr>
+    <tr><td>wifi_pass</td><td>c0bea577-0000-4000-8000-00000000f012</td><td>Write</td><td>[u8; 32]</td><td>WiFi password (UTF-8, null-padded)</td></tr>
   </tbody>
 </table>
 
-CMD payload (JSON-like, max 64B):
+#### Advertising #### {#ble-advertising}
 
-```json
-{"cmd":"play","id":0,"face":1,"volume":80}
+The device advertises with a 16-bit service UUID <code>0xCBFF</code> in
+the advertising PDU for reliable device identification during scanning.
+The companion app filters scan results by this UUID rather than by
+device name prefix.
+
+The advertised device name is user-configurable via the
+<code>cube_name</code> characteristic. After a write to
+<code>cube_name</code>, the advertising payload is updated with the new
+name. The name persists across disconnect/re-advertise cycles but does
+not yet persist across power cycles (NVS storage is stubbed).
+
+#### Stack Architecture #### {#ble-stack}
+
+The BLE stack runs as a single async task using the
+<code>embassy_futures::join</code> pattern — the GATT runner and the
+peripheral advertising/connection loop execute concurrently in the same
+async context. This avoids the need for multi-task coordination or
+shared state mutexes for the GATT server.
+
+```rust
+// Simplified BLE task structure
+embassy_futures::join::join(ble_runner, async {
+    loop {
+        // Advertise with current name + UUID 0xCBFF
+        let conn = peripheral.advertise(&adv_params).await;
+        // Handle GATT events on connection
+        gatt_server.run(&conn).await;
+        // On disconnect, loop resumes advertising
+    }
+}).await;
 ```
-
-STATUS notification:
-
-```json
-{"state":"playing","id":0,"progress":75,"battery":0,"rssi":-50}
-```
-
-#### Service 2: Upload Service (UUID: 0000FFE1-…) #### {#ble-upload}
-
-<table>
-  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td>START</td><td>FFE4</td><td>Write</td><td>File metadata (id, name, length)</td></tr>
-    <tr><td>CHUNK</td><td>FFE5</td><td>Write</td><td>512B raw data chunk</td></tr>
-    <tr><td>DONE</td><td>FFE6</td><td>Write</td><td>Finalize upload + keyword mapping</td></tr>
-    <tr><td>LIST</td><td>FFE7</td><td>Read, Notify</td><td>List of sounds on SD with free space</td></tr>
-  </tbody>
-</table>
-
-#### Service 3: LED Patterns (UUID: 0000FFE2-…) #### {#ble-patterns}
-
-<table>
-  <thead><tr><th>Characteristic</th><th>UUID</th><th>Properties</th><th>Description</th></tr></thead>
-  <tbody>
-    <tr><td>PATTERN</td><td>FFE8</td><td>Write</td><td>Compressed LED frame data</td></tr>
-    <tr><td>PATTERN_LIST</td><td>FFE9</td><td>Read, Notify</td><td>List of stored patterns</td></tr>
-  </tbody>
-</table>
 
 ### Wi-Fi Server (<code>wifi_server.rs</code>) ### {#wifi-server}
 
@@ -570,59 +574,84 @@ supports browsing, downloading, rating, and remixing packs.
 
 ## App-Firmware Communication Flow ## {#app-comm-flow}
 
+<strong>Discovery sequence:</strong>
+
+1. App scans for BLE devices advertising the 16-bit service UUID
+    <code>0xCBFF</code> (not a name prefix match)
+2. Before scanning, the app clears the BlueZ cache for known
+    CubeMaster device addresses to ensure fresh advertisement data
+3. Scan results are polled reactively every 500ms for a 6-second
+    discovery window
+
 <strong>Connection sequence:</strong>
 
-1. App scans for BLE devices advertising "CubeMaster-XXXX"
-2. App connects, negotiates MTU 512
-3. App reads STATUS characteristic for cube state
-4. If Wi-Fi desired, app sends Wi-Fi credentials via BLE CMD
-5. Cube connects to Wi-Fi and notifies its IP via BLE STATUS
+1. App connects to the selected peripheral
+2. App negotiates MTU 247
+3. App discovers GATT services and enumerates 4 characteristics
+    (cube_name, status, wifi_ssid, wifi_pass)
+4. App subscribes to <code>status</code> notifications
 
-<strong>Upload sequence (BLE, small files):</strong>
+<strong>Rename sequence:</strong>
 
-1. App writes START characteristic with file metadata
-2. App iterates CHUNK writes (512B each)
-3. App writes DONE with keyword mapping
-4. Cube acknowledges via STATUS notification
+1. App writes UTF-8 name bytes (null-padded to 32 bytes) to the
+    <code>cube_name</code> characteristic
+2. Cube updates its advertising payload with the new name
+3. After disconnect, cube re-advertises with the updated name
 
-<strong>Upload sequence (Wi-Fi, large files):</strong>
+<strong>WiFi provisioning sequence:</strong>
 
-1. App sends HTTP POST to <code>/upload</code> on cube's Wi-Fi IP
-2. Cube streams file to SD, returns 200 OK
-3. App sends keyword mapping via BLE CONFIG write
+1. App writes WiFi SSID (UTF-8, null-padded to 32 bytes) to the
+    <code>wifi_ssid</code> characteristic
+2. App writes WiFi password (UTF-8, null-padded to 32 bytes) to the
+    <code>wifi_pass</code> characteristic
+3. Cube stores credentials in RAM (NVS persistence not yet implemented)
+4. WiFi STA connection is stubbed — credentials are received but not
+    acted upon in the current implementation
+
+<strong>State management:</strong>
+
+The companion app maintains a global application state that tracks the
+currently connected cube (BLE address, device name, signal strength,
+connection status). This state persists across view navigation so that
+all views reflect the current connection without re-scanning.
 
 ## UI Components ## {#app-ui}
 
 ### Main Views ### {#app-views}
 
+<figure>
+  <img src="diagrams/img/companion-app-architecture.svg" alt="Companion app architecture">
+  <figcaption>Companion app module and view architecture</figcaption>
+</figure>
+
 <dl>
-  <dt>Sound Bank View</dt>
+  <dt>Discover View</dt>
   <dd>
-    Browse local sound banks, create new banks, import/export. Shows
-    a grid of sound banks with metadata (name, sound count, size).
+    Reactive BLE scan that polls the adapter every 500ms over a
+    6-second discovery window. Displays device cards showing device
+    name, BLE address, and signal strength (RSSI). Each card offers
+    a Pair button (for unconnected devices) or a Disconnect button
+    (for the connected device). A connection status header bar at
+    the top of the view shows the currently paired cube.
   </dd>
 
-  <dt>Cube View</dt>
+  <dt>Dashboard View</dt>
   <dd>
-    Connected cube status dashboard. Shows BLE signal strength, SD
-    free space, current configuration, and playback state.
+    Displays connected cube information: BLE signal strength, device
+    address, WiFi status (configured/not configured), and firmware
+    version placeholder. Shows an empty state with guidance text when
+    no cube is connected.
   </dd>
 
-  <dt>Editor View</dt>
+  <dt>Settings View</dt>
   <dd>
-    Assign keywords to sounds, fine-tune VAD thresholds, map LED
-    patterns to sounds, configure sequences.
-  </dd>
-
-  <dt>Live Control View</dt>
-  <dd>
-    Big trigger buttons for each sound, volume slider, panic button
-    (stop all), ambiance mode toggle.
-  </dd>
-
-  <dt>Hub View (Post-MVP)</dt>
-  <dd>
-    Browse community sound packs, download, rate, and share.
+    Cube management interface with three sections: (1) Cube Rename —
+    text input that writes to the <code>cube_name</code> BLE
+    characteristic on submit; (2) WiFi Configuration — SSID dropdown
+    populated from <code>nmcli</code> scan results plus a password
+    field, writes to <code>wifi_ssid</code> and <code>wifi_pass</code>
+    characteristics; (3) Connected Cube info panel showing current
+    connection state.
   </dd>
 </dl>
 
@@ -741,14 +770,75 @@ The cube's HTTP server listens on port 8080.
 
 <em>This section is non-normative.</em>
 
-- BLE pairing: Just Works for MVP. Future versions should implement
-    numeric comparison pairing for production.
-- Wi-Fi credentials: Stored in plaintext on the cube's NVS partition.
-    Consider encrypting with a device-specific key in production.
-- HTTP server: No authentication. Only accessible on the local network
-    segment. Consider adding a simple pre-shared key for production.
+- BLE pairing: Just Works for MVP (no MITM protection). The
+    architecture for PSK-bootstrapped pairing is designed in
+    <code>shared/src/auth.rs</code> (HMAC-SHA256 challenge-response)
+    but is not yet wired into the BLE connection flow.
+- HMAC-based authentication: The <code>shared/src/auth.rs</code> module
+    defines an HMAC-SHA256 auth protocol where a pre-shared key (PSK)
+    entered during first pairing is used to derive session tokens.
+    This is designed but not active — the current MVP uses
+    unauthenticated BLE (Just Works).
+- Wi-Fi credentials: Stored in RAM only (NVS persistence not yet
+    implemented). When NVS is added, credentials should be encrypted
+    with a device-specific key.
+- HTTP server: Not yet implemented. When added, it should require at
+    minimum a PSK-derived bearer token.
 - SD card: No encryption. Sound files are user-generated content with
     no sensitive data.
+
+# Implementation Status # {#implementation-status}
+
+<em>This section is non-normative.</em>
+
+## What's Implemented ## {#status-implemented}
+
+The following features are fully implemented and functional:
+
+- <strong>BLE Advertising</strong>: <code>trouble-host</code> 0.6.0 peripheral
+    advertising with 16-bit service UUID <code>0xCBFF</code> and
+    configurable device name
+- <strong>GATT Server</strong>: CubeInfo service with 4 characteristics
+    (cube_name, status, wifi_ssid, wifi_pass) using
+    <code>#[gatt_server]</code> / <code>#[gatt_service]</code> macros
+- <strong>Reactive BLE Scanning</strong>: Companion app discovers cubes by
+    UUID filter, polls every 500ms for 6s, clears BlueZ cache
+- <strong>Cube Rename via BLE</strong>: Write to <code>cube_name</code>
+    characteristic updates the advertising name immediately
+- <strong>WiFi Credential Delivery</strong>: SSID and password written to
+    separate characteristics, received and stored in firmware RAM
+- <strong>Custom Dark Desktop UI</strong>: Dioxus desktop app with
+    Tailwind-inspired CSS, sidebar navigation, custom titlebar
+- <strong>Mutable Advertising Name</strong>: Device name persists across
+    disconnect/reconnect cycles within a single power session
+
+## What's Stubbed ## {#status-stubbed}
+
+The following features have interfaces defined but are not yet
+functional:
+
+- <strong>WiFi STA Connection</strong>: Credentials are received via BLE
+    but the firmware does not yet connect to a WiFi access point
+- <strong>NVS Flash Persistence</strong>: All state is in-RAM only; cube
+    name and WiFi credentials reset on power cycle
+- <strong>HTTP Server</strong>: Not started; endpoint definitions exist in
+    the specification but no server code runs
+- <strong>mDNS Responder</strong>: Service discovery over WiFi is designed
+    but not implemented (cube is not yet on WiFi)
+- <strong>PSK-based Pairing</strong>: HMAC auth architecture exists in
+    <code>shared/src/auth.rs</code> but is not wired to BLE events
+
+## What's Not Started ## {#status-not-started}
+
+The following features have no implementation work:
+
+- Sound file upload (BLE chunked or WiFi bulk)
+- LED pattern rendering and RMT DMA output
+- Audio playback via I2S
+- Voice pipeline (PDM capture, VAD, keyword spotting)
+- SD card filesystem operations
+- Multi-cube synchronization
+- Mobile companion app builds
 
 # Post-MVP Features # {#post-mvp}
 

@@ -1,0 +1,83 @@
+@startuml companion-app-architecture
+!theme plain
+skinparam backgroundColor #FFFFFF
+skinparam packageBackgroundColor #EEEEFF
+skinparam packageBorderColor #333333
+skinparam componentBackgroundColor #FFFFDD
+
+title Companion app architecture, Dioxus desktop
+
+package "Companion app (Dioxus)" as root #LightBlue {
+
+  package "Views" as views {
+    [Discover View] as discover
+    [Dashboard View] as dashboard
+    [Settings View] as settings
+  }
+
+  package "Components" as components {
+    [Sidebar] as sidebar
+    [ConnectionHeader] as connhdr
+    [Titlebar] as titlebar
+    [Icons] as icons
+  }
+
+  package "Modules" as modules {
+    package "ble" as blemod {
+      [scanner] as scanner
+      [client] as bleclient
+      [pairing] as pairing
+    }
+
+    package "wifi" as wifimod {
+      [discovery\n(mdns-sd)] as wifidisc
+      [http_client\n(reqwest)] as httpclient
+    }
+
+    package "store" as storemod {
+      [local] as localstore
+    }
+
+    [state\n(global app state)] as state
+  }
+}
+
+package "External Dependencies" as deps #FFF0F0 {
+  [btleplug] as btleplug
+  [dioxus] as dioxus
+  [mdns-sd] as mdns
+  [reqwest] as reqwest
+}
+
+' View relationships
+discover --> scanner : scan for devices
+discover --> state : read/write connected cube
+dashboard --> state : read cube info
+settings --> bleclient : write characteristics
+settings --> state : read/write config
+
+' Component relationships
+sidebar --> views : navigate
+connhdr --> state : show connection status
+titlebar --> dioxus : window controls
+
+' Module relationships
+scanner --> btleplug : BLE scan
+bleclient --> btleplug : GATT read/write
+pairing --> bleclient : connect + discover
+wifidisc --> mdns : mDNS browse
+httpclient --> reqwest : HTTP calls
+state --> localstore : persist
+
+' Layout hints
+views -[hidden]down-> modules
+components -[hidden]right-> views
+
+note bottom of root
+  · Dark desktop UI with Tailwind-inspired CSS
+  · Reactive state drives all views
+  · BLE scanner polls every 500ms for 6s
+  · Global state persists across view navigation
+end note
+
+@enduml
