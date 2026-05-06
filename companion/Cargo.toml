@@ -1,0 +1,10 @@
+[package]
+description = "CubeMaster companion app (Dioxus desktop)"
+name = "cubemaster-companion"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+dioxus = { version = "0.7.7", features = ["desktop", "router"] }
+cubemaster-shared.workspace = true
