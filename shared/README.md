@@ -5,12 +5,14 @@ dependencies. Shared between `firmware/` and `companion/`.
 
 ## Module Layout
 
-```
+```text
 shared/
   src/
     lib.rs          — crate root, #![no_std], re-exports
+    auth.rs          — pairing and session auth types
     ble.rs           — GATT service/characteristic UUIDs
     led.rs           — LED geometry constants, color types
+    naming.rs        — friendly name generation from MAC
     protocol.rs      — wire format (message type enum, coders)
     sound.rs         — audio format constants (sample rate, bit depth, ...)
 ```

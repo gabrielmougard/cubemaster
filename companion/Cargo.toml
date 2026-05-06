@@ -6,5 +6,22 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+cubemaster-shared = { workspace = true, features = ["std"] }
 dioxus = { version = "0.7.7", features = ["desktop", "router"] }
-cubemaster-shared.workspace = true
+btleplug = "0.11"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "process"] }
+futures = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+mdns-sd = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+rand = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Persistent local config (stores paired cube list + PSKs)
+directories = "6"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+hex = "0.4"
+heapless = { version = "0.8", features = ["serde"] }
+uuid = "1"
