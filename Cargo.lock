@@ -867,6 +867,7 @@ dependencies = [
  "defmt 1.0.1",
  "edge-mdns",
  "edge-nal",
+ "embassy-embedded-hal",
  "embassy-executor",
  "embassy-futures",
  "embassy-net",

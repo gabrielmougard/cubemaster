@@ -3,6 +3,7 @@ use crate::components::connection_header::ConnectionHeader;
 use crate::components::icons::*;
 use crate::components::sidebar::{NavItem, Sidebar};
 use crate::state::use_app_state;
+use crate::Route;
 
 #[component]
 pub fn DashboardView() -> Element {
@@ -20,6 +21,8 @@ pub fn DashboardView() -> Element {
                         cube_name: cube.friendly_name.clone(),
                         device_id: cube.device_id.clone(),
                         rssi: cube.rssi,
+                        wifi_ip: state.cube_wifi_ip.clone(),
+                        wifi_ssid: state.cube_wifi_ssid.clone(),
                     }
                 } else {
                     div { class: "empty-state",
@@ -34,13 +37,25 @@ pub fn DashboardView() -> Element {
 }
 
 #[component]
-fn ConnectedDashboard(cube_name: String, device_id: String, rssi: Option<i16>) -> Element {
+fn ConnectedDashboard(
+    cube_name: String,
+    device_id: String,
+    rssi: Option<i16>,
+    wifi_ip: Option<String>,
+    wifi_ssid: Option<String>,
+) -> Element {
     let ble_value = rssi.map(|r| format!("{r} dBm")).unwrap_or("-".into());
     let ble_status = match rssi {
         Some(r) if r > -50 => "good",
         Some(r) if r > -70 => "warn",
         Some(_) => "bad",
         None => "off",
+    };
+
+    let (wifi_value, wifi_status) = match (&wifi_ip, &wifi_ssid) {
+        (Some(ip), Some(ssid)) => (format!("{ssid} ({ip})"), "good"),
+        (Some(ip), None) => (ip.clone(), "good"),
+        _ => ("Not configured".to_string(), "off"),
     };
 
     rsx! {
@@ -63,9 +78,9 @@ fn ConnectedDashboard(cube_name: String, device_id: String, rssi: Option<i16>) -
             }
             StatusCard {
                 title: "WiFi".to_string(),
-                value: "Not configured".to_string(),
+                value: wifi_value,
                 icon: "wifi".to_string(),
-                status: "off".to_string(),
+                status: wifi_status.to_string(),
             }
             StatusCard {
                 title: "Firmware".to_string(),
@@ -90,13 +105,11 @@ fn ConnectedDashboard(cube_name: String, device_id: String, rssi: Option<i16>) -
         div { class: "actions-section",
             h2 { class: "section-title", "Quick Actions" }
             div { class: "action-buttons",
-                button { class: "btn btn-primary",
-                    IconWifi { class: "btn-icon".to_string() }
-                    span { "Setup WiFi" }
-                }
-                button { class: "btn btn-secondary",
-                    IconRefresh { class: "btn-icon".to_string() }
-                    span { "Refresh" }
+                Link { to: Route::Settings,
+                    button { class: "btn btn-primary",
+                        IconWifi { class: "btn-icon".to_string() }
+                        span { "Setup WiFi" }
+                    }
                 }
             }
         }

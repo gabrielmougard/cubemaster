@@ -26,6 +26,11 @@ pub struct AppState {
     pub connected_cube: Option<ConnectedCube>,
     /// Whether a BLE scan is currently in progress.
     pub is_scanning: bool,
+    /// WiFi IP address of the cube (if connected to WiFi).
+    /// Set after successful WiFi provisioning when the cube reports its IP.
+    pub cube_wifi_ip: Option<String>,
+    /// The SSID the cube is connected to (if any).
+    pub cube_wifi_ssid: Option<String>,
 }
 
 impl AppState {
@@ -33,11 +38,17 @@ impl AppState {
         Self {
             connected_cube: None,
             is_scanning: false,
+            cube_wifi_ip: None,
+            cube_wifi_ssid: None,
         }
     }
 
     pub fn is_connected(&self) -> bool {
         self.connected_cube.is_some()
+    }
+
+    pub fn is_wifi_connected(&self) -> bool {
+        self.cube_wifi_ip.is_some()
     }
 }
 

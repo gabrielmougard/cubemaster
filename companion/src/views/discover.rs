@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use crate::components::connection_header::ConnectionHeader;
 use crate::components::icons::*;
@@ -127,8 +127,83 @@ pub fn DiscoverView() -> Element {
                         p { "No cubes found yet. Click Scan to search nearby." }
                     }
                 }
+
+                // Previously Connected section (from persistent history).
+                PreviouslyConnectedSection { app_state: app_state }
             }
         }
+    }
+}
+
+/// Displays a list of previously connected cubes from the persistent local store.
+#[component]
+fn PreviouslyConnectedSection(app_state: Signal<crate::state::AppState>) -> Element {
+    let store = use_signal(|| crate::store::local::LocalStore::load());
+    let cubes = store.read().cubes.clone();
+
+    if cubes.is_empty() {
+        return rsx! {};
+    }
+
+    // Don't show the currently connected cube in history.
+    let connected_id = app_state.read().connected_cube.as_ref().map(|c| c.device_id.clone());
+
+    let history_cubes: Vec<_> = cubes.iter()
+        .filter(|c| connected_id.as_deref() != Some(&c.device_id))
+        .collect();
+
+    if history_cubes.is_empty() {
+        return rsx! {};
+    }
+
+    rsx! {
+        div { class: "actions-section",
+            h2 { class: "section-title",
+                IconCube { class: "section-icon".to_string() }
+                span { "Previously Connected" }
+            }
+            div { class: "paired-list",
+                for cube in history_cubes.iter() {
+                    div { class: "paired-item",
+                        div { class: "paired-item-info",
+                            IconCube { class: "paired-icon".to_string() }
+                            div { class: "paired-details",
+                                span { class: "paired-name", "{cube.cube_name}" }
+                                span { class: "paired-id", "{cube.ble_address}" }
+                            }
+                        }
+                        div { class: "paired-item-meta",
+                            span { class: "last-seen",
+                                {format_last_seen(cube.last_connected)}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Format a Unix timestamp into a human-readable "last seen" string.
+fn format_last_seen(timestamp: u64) -> String {
+    if timestamp == 0 {
+        return "Never".to_string();
+    }
+
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let elapsed = now.saturating_sub(timestamp);
+    if elapsed < 60 {
+        "Just now".to_string()
+    } else if elapsed < 3600 {
+        format!("{}m ago", elapsed / 60)
+    } else if elapsed < 86400 {
+        format!("{}h ago", elapsed / 3600)
+    } else {
+        format!("{}d ago", elapsed / 86400)
     }
 }
 
@@ -303,12 +378,37 @@ fn DeviceCard(
                     pair_status.set(PairCardState::Connected);
                     app_state.write().connected_cube = Some(ConnectedCube {
                         name: name.clone(),
-                        device_id: address,
-                        short_id,
+                        device_id: address.clone(),
+                        short_id: short_id.clone(),
                         friendly_name: name.clone(),
                         rssi,
                         connected_at: Instant::now(),
                     });
+
+                    // Persist to local store for auto-reconnect on future launches.
+                    let now = SystemTime::now()
+                        .duration_since(UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let mut store = crate::store::local::LocalStore::load();
+                    store.add_or_update(crate::ble::pairing::PairedCubeInfo {
+                        device_id: address.clone(),
+                        cube_name: name.clone(),
+                        psk: [0u8; 32], // PSK not yet used in MVP
+                        ble_address: address.clone(),
+                        last_connected: now,
+                        short_id: short_id.clone(),
+                    });
+                    if let Err(e) = store.save() {
+                        tracing::warn!("Failed to save cube history: {}", e);
+                    }
+
+                    // After connecting, read the cube's WiFi status to check
+                    // if it's already WiFi-connected (e.g. auto-connected on boot).
+                    if let Some((ip, ssid)) = read_cube_wifi_status().await {
+                        app_state.write().cube_wifi_ip = Some(ip);
+                        app_state.write().cube_wifi_ssid = Some(ssid);
+                    }
                 }
                 Err(e) => {
                     pair_status.set(PairCardState::Failed(e));
@@ -502,4 +602,83 @@ pub async fn disconnect_ble() -> Result<(), String> {
 
     tracing::warn!("No CubeMaster peripheral found to disconnect");
     Ok(())
+}
+
+/// Public wrapper for `read_cube_wifi_status` which is callable from other modules.
+pub async fn read_cube_wifi_status_pub() -> Option<(String, String)> {
+    read_cube_wifi_status().await
+}
+
+/// Read the cube's WiFi status after BLE connection.
+/// Returns Some((ip, ssid)) if the cube is already WiFi-connected, None otherwise.
+async fn read_cube_wifi_status() -> Option<(String, String)> {
+    use btleplug::api::{Central, Peripheral as _};
+    use uuid::Uuid;
+
+    // Small delay for GATT to stabilize after connection.
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+    let adapter = crate::ble::scanner::get_adapter().await.ok()?;
+    let peripherals = adapter.peripherals().await.ok()?;
+
+    let mut peripheral = None;
+    for p in &peripherals {
+        if p.is_connected().await.unwrap_or(false) {
+            peripheral = Some(p.clone());
+            break;
+        }
+    }
+
+    let peripheral = peripheral?;
+
+    peripheral.discover_services().await.ok()?;
+
+    // Status characteristic UUID
+    let status_uuid = Uuid::parse_str("c0bea577-0000-4000-8000-00000000ffe2").ok()?;
+    // WiFi SSID characteristic UUID
+    let ssid_uuid = Uuid::parse_str("c0bea577-0000-4000-8000-00000000f011").ok()?;
+
+    let characteristics = peripheral.characteristics();
+    let status_char = characteristics.iter().find(|c| c.uuid == status_uuid)?;
+
+    let data = peripheral.read(status_char).await.ok()?;
+    let end = data.iter().position(|&b| b == 0).unwrap_or(data.len());
+
+    if end == 0 {
+        return None;
+    }
+
+    let status_str = std::str::from_utf8(&data[..end]).ok()?;
+    tracing::info!("WiFi status from cube: {}", status_str);
+
+    // Parse IP from JSON: {"w":1,"ip":"x.x.x.x"}
+    let ip = parse_ip_from_status(status_str)?;
+
+    // Read the SSID from the wifi_ssid characteristic.
+    let ssid = if let Some(ssid_char) = characteristics.iter().find(|c| c.uuid == ssid_uuid) {
+        if let Ok(ssid_data) = peripheral.read(ssid_char).await {
+            let ssid_end = ssid_data.iter().position(|&b| b == 0).unwrap_or(ssid_data.len());
+            std::str::from_utf8(&ssid_data[..ssid_end])
+                .ok()
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "Unknown".to_string())
+        } else {
+            "Unknown".to_string()
+        }
+    } else {
+        "Unknown".to_string()
+    };
+
+    Some((ip, ssid))
+}
+
+/// Parse IP from the compact status JSON: {"w":1,"ip":"x.x.x.x"}
+fn parse_ip_from_status(status: &str) -> Option<String> {
+    let ip_key = "\"ip\":\"";
+    let start = status.find(ip_key)?;
+    let value_start = start + ip_key.len();
+    let end = status[value_start..].find('"')?;
+    let ip = &status[value_start..value_start + end];
+    if !ip.is_empty() { Some(ip.to_string()) } else { None }
 }

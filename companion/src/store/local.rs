@@ -60,6 +60,9 @@ impl LocalStore {
         if let Some(existing) = self.cubes.iter_mut().find(|c| c.device_id == cube.device_id) {
             existing.cube_name = cube.cube_name;
             existing.psk = cube.psk;
+            existing.ble_address = cube.ble_address;
+            existing.last_connected = cube.last_connected;
+            existing.short_id = cube.short_id;
         } else {
             self.cubes.push(cube);
         }

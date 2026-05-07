@@ -93,6 +93,9 @@ pub async fn confirm_pairing(
         device_id: result.device_id.to_string(),
         cube_name: result.cube_name.to_string(),
         psk,
+        ble_address: String::new(),
+        last_connected: 0,
+        short_id: String::new(),
     })
 }
 
@@ -141,6 +144,15 @@ pub struct PairedCubeInfo {
     pub cube_name: String,
     #[serde(with = "hex_serde")]
     pub psk: [u8; 32],
+    /// BLE address string (e.g. "1C:DB:D4:41:1E:28") for reconnection.
+    #[serde(default)]
+    pub ble_address: String,
+    /// Last connected Unix timestamp (seconds since epoch).
+    #[serde(default)]
+    pub last_connected: u64,
+    /// The short advertising ID (e.g. "1E28").
+    #[serde(default)]
+    pub short_id: String,
 }
 
 /// Hex serialization for the PSK in JSON config files.

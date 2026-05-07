@@ -604,9 +604,25 @@ supports browsing, downloading, rating, and remixing packs.
     <code>wifi_ssid</code> characteristic
 2. App writes WiFi password (UTF-8, null-padded to 32 bytes) to the
     <code>wifi_pass</code> characteristic
-3. Cube stores credentials in RAM (NVS persistence not yet implemented)
-4. WiFi STA connection is stubbed — credentials are received but not
-    acted upon in the current implementation
+3. Cube stores credentials in NVS flash (persists across power cycles)
+4. Cube initiates WiFi STA connection with the provided credentials
+5. On DHCP success, cube reports its IP via the <code>status</code>
+    characteristic (JSON: <code>{"wifi":"connected","ip":"x.x.x.x"}</code>)
+6. App reads the <code>status</code> characteristic to obtain the cube's
+    WiFi IP address for subsequent HTTP communication
+
+<strong>WiFi auto-connect on boot:</strong>
+
+If the cube has stored WiFi credentials in NVS flash from a previous
+provisioning session, it automatically attempts to connect to the stored
+SSID on power-on. The auto-connect sequence:
+
+1. On boot, firmware loads config from NVS flash
+2. If <code>wifi_ssid</code> is non-empty, sends an
+    <code>AutoConnect</code> command to the WiFi task
+3. WiFi task attempts connection with stored SSID/password
+4. On success, supervisor receives <code>WifiEvent::Connected</code>
+    with the assigned IP — same as on-demand provisioning
 
 <strong>State management:</strong>
 
@@ -647,11 +663,15 @@ all views reflect the current connection without re-scanning.
   <dd>
     Cube management interface with three sections: (1) Cube Rename —
     text input that writes to the <code>cube_name</code> BLE
-    characteristic on submit; (2) WiFi Configuration — SSID dropdown
-    populated from <code>nmcli</code> scan results plus a password
-    field, writes to <code>wifi_ssid</code> and <code>wifi_pass</code>
-    characteristics; (3) Connected Cube info panel showing current
-    connection state.
+    characteristic on submit; (2) WiFi Configuration — styled SSID
+    dropdown populated from <code>nmcli</code> scan results (with
+    rescan button and scanning indicator) plus a password field,
+    writes to <code>wifi_ssid</code> and <code>wifi_pass</code>
+    characteristics, then polls the cube's status characteristic to
+    retrieve the assigned WiFi IP address. Displays a green connection
+    status card when the cube is connected to WiFi showing the SSID
+    and IP; (3) Connected Cube info panel showing current connection
+    state with disconnect button.
   </dd>
 </dl>
 
@@ -779,9 +799,11 @@ The cube's HTTP server listens on port 8080.
     entered during first pairing is used to derive session tokens.
     This is designed but not active — the current MVP uses
     unauthenticated BLE (Just Works).
-- Wi-Fi credentials: Stored in RAM only (NVS persistence not yet
-    implemented). When NVS is added, credentials should be encrypted
-    with a device-specific key.
+- Wi-Fi credentials: Stored in NVS flash using
+    <code>sequential-storage</code>. Credentials persist across power
+    cycles to enable auto-connect. When full security hardening is
+    added, credentials should be encrypted with a device-specific key
+    derived from the hardware eFuse.
 - HTTP server: Not yet implemented. When added, it should require at
     minimum a PSK-derived bearer token.
 - SD card: No encryption. Sound files are user-generated content with
@@ -806,25 +828,39 @@ The following features are fully implemented and functional:
 - <strong>Cube Rename via BLE</strong>: Write to <code>cube_name</code>
     characteristic updates the advertising name immediately
 - <strong>WiFi Credential Delivery</strong>: SSID and password written to
-    separate characteristics, received and stored in firmware RAM
+    separate characteristics, received by firmware, combined, and used
+    to trigger WiFi STA connection
+- <strong>WiFi STA Connection</strong>: After receiving credentials via
+    BLE, the firmware connects to the specified AP, obtains an IP via
+    DHCP, and reports the IP back through the status characteristic
+- <strong>WiFi Auto-Connect on Boot</strong>: If stored WiFi credentials
+    exist in NVS flash, the device automatically attempts to connect
+    to the stored SSID on power-on without requiring the companion app
+- <strong>NVS Flash Persistence</strong>: Configuration (cube name, WiFi
+    credentials, PSK, advertising ID) is persisted to internal flash
+    using <code>sequential-storage</code> with <code>esp-storage</code>.
+    Settings survive power cycles and resets
 - <strong>Custom Dark Desktop UI</strong>: Dioxus desktop app with
     Tailwind-inspired CSS, sidebar navigation, custom titlebar
 - <strong>Mutable Advertising Name</strong>: Device name persists across
     disconnect/reconnect cycles within a single power session
+- <strong>Styled WiFi Settings</strong>: SSID dropdown with custom dark
+    theme styling, rescan button, scanning indicator, and WiFi
+    connection status card showing IP when connected
 
 ## What's Stubbed ## {#status-stubbed}
 
 The following features have interfaces defined but are not yet
 functional:
 
-- <strong>WiFi STA Connection</strong>: Credentials are received via BLE
-    but the firmware does not yet connect to a WiFi access point
-- <strong>NVS Flash Persistence</strong>: All state is in-RAM only; cube
-    name and WiFi credentials reset on power cycle
+- <strong>WiFi STA Hardware Integration</strong>: The WiFi connection
+    state machine is implemented with command/event channels, but the
+    actual <code>esp-radio::wifi</code> controller calls are simulated
+    (awaiting full hardware deployment to finalize DHCP + IP reading)
 - <strong>HTTP Server</strong>: Not started; endpoint definitions exist in
     the specification but no server code runs
 - <strong>mDNS Responder</strong>: Service discovery over WiFi is designed
-    but not implemented (cube is not yet on WiFi)
+    but not implemented (depends on WiFi hardware integration)
 - <strong>PSK-based Pairing</strong>: HMAC auth architecture exists in
     <code>shared/src/auth.rs</code> but is not wired to BLE events
 
