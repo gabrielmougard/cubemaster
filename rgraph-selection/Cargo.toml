@@ -1,0 +1,9 @@
+[package]
+description = "Data-join and naming primitives, adapted for declarative Dioxus's VDOM"
+name = "rgraph-selection"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false
