@@ -1,0 +1,12 @@
+[package]
+description = "Interpolate number, color, string, array, basis spline, zoom and more"
+name = "rgraph-interpolate"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rgraph-color = { path = "../rgraph-color" }
+
+[lib]
+doctest = false
