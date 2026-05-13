@@ -1,0 +1,9 @@
+[package]
+description = "Color spaces (RGB, HSL, Lab, HCL, Cubehelix) with parsing and formatting"
+name = "rgraph-color"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false

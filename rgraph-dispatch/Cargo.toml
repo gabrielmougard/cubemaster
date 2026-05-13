@@ -1,0 +1,9 @@
+[package]
+description = "Efficient event dispatcher for named callbacks"
+name = "rgraph-dispatch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+doctest = false
