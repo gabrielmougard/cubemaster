@@ -1,0 +1,16 @@
+[package]
+description = "Rust port of d3-zoom: pan/zoom transform + gesture state machine for declarative VDOMs (Dioxus)"
+name = "rgraph-zoom"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rgraph-dispatch = { path = "../rgraph-dispatch" }
+rgraph-drag = { path = "../rgraph-drag" }
+rgraph-interpolate = { path = "../rgraph-interpolate" }
+rgraph-selection = { path = "../rgraph-selection" }
+rgraph-transition = { path = "../rgraph-transition" }
+
+[lib]
+doctest = false
