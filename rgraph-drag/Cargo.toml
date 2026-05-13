@@ -1,0 +1,13 @@
+[package]
+description = "Pointer-gesture state machine, framework-agnostic for Dioxus and other VDOM apps"
+name = "rgraph-drag"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rgraph-dispatch = { path = "../rgraph-dispatch" }
+rgraph-selection = { path = "../rgraph-selection" }
+
+[lib]
+doctest = false
