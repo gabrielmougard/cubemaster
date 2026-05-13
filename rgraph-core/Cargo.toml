@@ -1,0 +1,23 @@
+[package]
+description = "Framework-agnostic core for node-based UIs (Rust port of @xyflow/system) — designed for Dioxus"
+name = "rgraph-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rgraph-dispatch = { path = "../rgraph-dispatch" }
+rgraph-drag = { path = "../rgraph-drag" }
+rgraph-interpolate = { path = "../rgraph-interpolate" }
+rgraph-selection = { path = "../rgraph-selection" }
+rgraph-transition = { path = "../rgraph-transition" }
+rgraph-zoom = { path = "../rgraph-zoom" }
+
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = []
+serde = ["dep:serde"]
+
+[lib]
+doctest = false
