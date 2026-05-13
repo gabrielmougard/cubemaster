@@ -1,0 +1,12 @@
+[package]
+description = "Rust lib for time-based animations"
+name = "rgraph-transition"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+rgraph-dispatch = { path = "../rgraph-dispatch" }
+
+[lib]
+doctest = false
