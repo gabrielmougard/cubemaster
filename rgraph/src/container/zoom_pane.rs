@@ -145,13 +145,17 @@ pub fn ZoomPane<
                     height: rect.size.height,
                 };
                 bounds_signal.set(bounds);
+                // Mirror into the shared store-level signal so
+                // viewport-helper hooks can convert screen↔flow coords
+                // without holding a local copy of the bbox.
+                store.dom_bbox.clone().set(bounds);
 
                 if let Some(existing) = &*engine_signal.peek() {
                     existing.set_dom_bbox(rect_to_core(bounds));
                     return;
                 }
 
-                let panzoom = build_panzoom(bounds, default_viewport, min_zoom, max_zoom);
+                let panzoom = build_panzoom(store, bounds, default_viewport, min_zoom, max_zoom);
                 let viewport = panzoom.get_viewport();
                 store.transform.clone().set(Transform::new(
                     viewport.x,
@@ -275,17 +279,25 @@ fn rect_to_core(b: PaneBounds) -> Rect {
     }
 }
 
-fn build_panzoom(
+fn build_panzoom<N, E>(
+    store: RGraphStore<N, E>,
     bounds: PaneBounds,
     default_viewport: Viewport,
     min_zoom: f64,
     max_zoom: f64,
-) -> XYPanZoom<()> {
-    let on_dragging_change: OnDraggingChange = Box::new(|_dragging: bool| {
-        // TODO(rgraph/phase4-followup): wire `pane_dragging` updates
-        // back into the store. The closure runs single-threaded inside
-        // the engine but we don't have a `RGraphStore` clone in scope
-        // here without `Send + Sync` conflicts; deferred.
+) -> XYPanZoom<()>
+where
+    N: Clone + PartialEq + 'static,
+    E: Clone + PartialEq + 'static,
+{
+    // `RGraphStore: Copy` so the move-closure below captures by value
+    // without `Send + Sync` constraints; the closure is invoked
+    // single-threaded inside the engine.
+    let on_dragging_change: OnDraggingChange = Box::new(move |dragging: bool| {
+        use dioxus::prelude::{ReadableExt, WritableExt};
+        if *store.pane_dragging.peek() != dragging {
+            store.pane_dragging.clone().set(dragging);
+        }
     });
     let on_pan_zoom_start: OnPanZoom = Box::new(|_evt, _vp| {});
     let on_pan_zoom: OnPanZoom = Box::new(|_evt, _vp| {});

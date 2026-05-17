@@ -18,6 +18,7 @@
 
 use dioxus::prelude::*;
 
+use crate::components::batch_provider::BatchProvider;
 use crate::context::provide_rgraph_store;
 use crate::store::{InitialStateParams, RGraphStore};
 use crate::types::edges::Edge;
@@ -134,9 +135,15 @@ pub fn RGraphProvider<
 
     provide_rgraph_store(store);
 
-    // TODO(rgraph/phase6): wrap children in `<BatchProvider>` to coalesce
-    // sub-render store writes. For Phase 2 we render children directly.
-    rsx! { {props.children} }
+    // Wrap children in `<BatchProvider>` (Phase 6) so node/edge
+    // updates pushed by `useReactFlow()`-style helpers are coalesced
+    // into one store write per render. Mirrors the TS provider's
+    // `<Provider value={store}><BatchProvider>{children}</BatchProvider></Provider>`.
+    rsx! {
+        BatchProvider::<N, E> {
+            {props.children}
+        }
+    }
 }
 
 #[cfg(test)]

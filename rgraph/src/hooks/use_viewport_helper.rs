@@ -163,28 +163,32 @@ impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> ViewportHel
     /// Translate a screen-space point to flow-space.
     ///
     /// Mirrors TS `screenToFlowPosition`. The TS source reads the
-    /// wrapper element's `getBoundingClientRect` to subtract the
-    /// dom-node origin; our port stores the wrapper id in
-    /// `dom_node_id` and Phase 4 will install a per-frame cache of
-    /// its `(domX, domY)` so this hook can subtract it. For Phase 3
-    /// we treat the wrapper origin as `(0, 0)`, which is correct when
-    /// the wrapper is at the document origin (the common case in
-    /// embedded test setups).
+    /// wrapper element's `getBoundingClientRect()` to subtract the
+    /// dom-node origin; we read the cached bbox from
+    /// `store.dom_bbox` (populated by `use_resize_handler` /
+    /// `<ZoomPane>` on mount and resize).
     pub fn screen_to_flow_position(&self, p: XYPosition, options: ScreenToFlowOptions) -> XYPosition {
         let transform = *self.store.transform.peek();
         let snap_grid = options.snap_grid.unwrap_or(*self.store.snap_grid.peek());
         let snap_to_grid = options.snap_to_grid.unwrap_or(*self.store.snap_to_grid.peek());
-        // TODO(rgraph/phase4): subtract `getBoundingClientRect()` of
-        // the wrapper before converting — see TS lines 84–98.
-        point_to_renderer_point(p, transform, snap_to_grid, snap_grid)
+        let bbox = *self.store.dom_bbox.peek();
+        let corrected = XYPosition {
+            x: p.x - bbox.x,
+            y: p.y - bbox.y,
+        };
+        point_to_renderer_point(corrected, transform, snap_to_grid, snap_grid)
     }
 
-    /// Translate a flow-space point to screen-space.
+    /// Translate a flow-space point to screen-space. Adds the wrapper's
+    /// document offset (TS lines 104–118).
     pub fn flow_to_screen_position(&self, p: XYPosition) -> XYPosition {
         let transform = *self.store.transform.peek();
-        // TODO(rgraph/phase4): add `getBoundingClientRect()` of the
-        // wrapper after converting — see TS lines 104–118.
-        renderer_point_to_point(p, transform)
+        let bbox = *self.store.dom_bbox.peek();
+        let renderer = renderer_point_to_point(p, transform);
+        XYPosition {
+            x: renderer.x + bbox.x,
+            y: renderer.y + bbox.y,
+        }
     }
 }
 

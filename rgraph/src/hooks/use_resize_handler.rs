@@ -69,6 +69,18 @@ where
                 if let Some((width, height)) = sane_size(w, h) {
                     write_size(store, width, height);
                 }
+                // Cache the full bbox (including origin) so
+                // `screen_to_flow_position` / `flow_to_screen_position`
+                // can subtract the wrapper's document offset.
+                write_bbox(
+                    store,
+                    crate::dom::PaneBounds {
+                        x: rect.origin.x,
+                        y: rect.origin.y,
+                        width: rect.size.width,
+                        height: rect.size.height,
+                    },
+                );
             }
 
             // Then attach the shim so subsequent resizes feed back
@@ -128,6 +140,16 @@ where
     }
     if (*store.height.peek() - height).abs() > f64::EPSILON {
         store.height.clone().set(height);
+    }
+}
+
+fn write_bbox<N, E>(store: RGraphStore<N, E>, bbox: crate::dom::PaneBounds)
+where
+    N: Clone + PartialEq + 'static,
+    E: Clone + PartialEq + 'static,
+{
+    if *store.dom_bbox.peek() != bbox {
+        store.dom_bbox.clone().set(bbox);
     }
 }
 

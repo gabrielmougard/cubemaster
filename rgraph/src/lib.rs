@@ -65,9 +65,12 @@ pub mod utils;
 // Public re-exports — mirror `xyflow-react/src/index.ts` 1:1.
 // ---------------------------------------------------------------------------
 
-// TODO(rgraph/phase7): re-export `RGraph` once `container::rgraph` is built.
-//   TS: `export { default as ReactFlow } from './container/ReactFlow';`
-// pub use container::rgraph::RGraph;
+// Phase 7: top-level `<RGraph>` component.
+pub use container::rgraph::{RGraph, RGraphProps as RGraphComponentProps};
+pub use container::rgraph::init_values::{DEFAULT_NODE_ORIGIN, DEFAULT_VIEWPORT};
+pub use container::rgraph::wrapper::{Wrapper, WrapperProps};
+pub use container::flow_renderer::{FlowRenderer, FlowRendererProps};
+pub use container::graph_view::{GraphView, GraphViewProps};
 
 // Phase 2: provider + store-updater components.
 pub use components::rgraph_provider::{RGraphProvider, RGraphProviderProps};

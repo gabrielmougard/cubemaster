@@ -118,6 +118,11 @@ pub struct RGraphStore<N: Clone + PartialEq + 'static = (), E: Clone + PartialEq
 
     // -- DOM hookup ----------------------------------------------------------
     pub dom_node_id: Signal<Option<String>>,
+    /// Cached client-rect of the wrapper element. Written by
+    /// [`crate::hooks::use_resize_handler`] / `<ZoomPane>` on mount
+    /// and resize; read by the viewport-helper hooks for
+    /// screen↔flow coordinate conversion.
+    pub dom_bbox: Signal<crate::dom::PaneBounds>,
     pub pane_dragging: Signal<bool>,
     pub no_pan_class_name: Signal<String>,
     pub pan_zoom: Signal<Option<SharedPanZoom>>,
@@ -280,6 +285,7 @@ impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> RGraphStore
             has_default_edges: Signal::new(state.has_default_edges),
 
             dom_node_id: Signal::new(state.dom_node_id),
+            dom_bbox: Signal::new(crate::dom::PaneBounds::default()),
             pane_dragging: Signal::new(state.pane_dragging),
             no_pan_class_name: Signal::new(state.no_pan_class_name),
             pan_zoom: Signal::new(None),

@@ -1,9 +1,13 @@
 //! `use rgraph::prelude::*;` brings the most commonly used items into scope.
 //!
-//! Status: Phase 3 — hooks added.
-//! More items are added here as each later phase lands.
+//! Status: Phase 7 — top-level `<RGraph>` added.
+//! Items are added here as each later phase lands.
 
-// TODO(rgraph/phase7): re-export `RGraph`.
+// Phase 7: top-level `<RGraph>` component.
+pub use crate::container::rgraph::{RGraph, RGraphProps as RGraphComponentProps};
+pub use crate::container::flow_renderer::{FlowRenderer, FlowRendererProps};
+pub use crate::container::graph_view::{GraphView, GraphViewProps};
+pub use crate::container::rgraph::wrapper::{Wrapper, WrapperProps};
 
 // Phase 1: pure data types and change utilities.
 pub use crate::types::edges::{

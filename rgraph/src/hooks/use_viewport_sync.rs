@@ -1,15 +1,11 @@
 //! Port of `xyflow-react/src/hooks/useViewportSync.ts`.
 //!
-//! Status: Phase 3 — partial implementation.
+//! Status: Phase 4 — implemented.
 //!
-//! Mirrors the TS hook that mirrors a *controlled* `viewport` prop on
-//! `<ReactFlow>` into both the live `panZoom` instance (via
-//! `panZoom.syncViewport`) and the store's `transform`.
-//!
-//! For Phase 3 the `panZoom` slot is empty, so this hook only writes
-//! into `store.transform`. Phase 4 will additionally call
-//! `pan_zoom.sync_viewport(...)` so the d3-zoom internal state stays
-//! in sync.
+//! Mirrors a *controlled* `viewport` prop on `<RGraph>` into both the
+//! live `panZoom` instance (via `pan_zoom.sync_viewport`) and the
+//! store's `transform`. When `pan_zoom` is `None` (e.g. before the
+//! `<ZoomPane>` mounts), only `transform` is written.
 
 #![allow(clippy::module_name_repetitions)]
 
@@ -34,9 +30,12 @@ where
     use_effect(move || {
         let Some(v) = viewport else { return; };
 
-        // TODO(rgraph/phase4): if `pan_zoom` is `Some`, call
-        // `pan_zoom.borrow_mut().sync_viewport(v)` here so the
-        // d3-zoom internal state matches.
+        // Forward to the d3-zoom engine so its internal transform
+        // stays in sync. Required for subsequent gestures to start
+        // from the controlled position (TS line 21).
+        if let Some(pz) = &*store.pan_zoom.peek() {
+            pz.borrow_mut().sync_viewport(v);
+        }
 
         let next = Transform::new(v.x, v.y, v.zoom);
         if *store.transform.peek() != next {

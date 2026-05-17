@@ -12,11 +12,11 @@ See the workspace plan for the full porting roadmap. Phases:
 - **Phase 1** [DONE]: Pure data types & `utils/changes` (`types/*`, `utils/changes`, `utils/general`).
 - **Phase 2** [DONE]: Store + `RGraphProvider` (Dioxus context).
 - **Phase 3** [DONE]: Core hooks (no rendering yet).
-- **Phase 4** [ALMOST DONE]: Viewport rendering (ZoomPane, Pane, Panel).
-- **Phase 5** [ALMOST DONE]: Nodes (NodeRenderer, NodeWrapper, default node types, drag).
-- **Phase 6** [ALMOST DONE]: Edges + Handles + Connections + EdgeRenderer.
+- **Phase 4** [DONE]: Viewport rendering (ZoomPane, Pane, Panel).
+- **Phase 5** [DONE]: Nodes (NodeRenderer, NodeWrapper, default node types, drag).
+- **Phase 6** [DONE]: Edges + Handles + Connections + EdgeRenderer.
 
-- **Phase 7** [TODO]: Top-level `RGraph` component -> first companion integration.
+- **Phase 7** [DONE]: Top-level `RGraph` component -> first companion integration.
 - **Phase 8** [TODO]: Additional components (Background, Controls, MiniMap, NodeToolbar, EdgeToolbar, NodeResizer).
 
 ## Module map (mirrors `xyflow-react/src/`)
