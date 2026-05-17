@@ -1,5 +1,5 @@
 [workspace]
-members = ["firmware", "companion", "shared"]
+members = ["firmware", "companion", "shared", "rgraph-dispatch", "rgraph-color", "rgraph-transition", "rgraph-selection", "rgraph-drag", "rgraph-interpolate", "rgraph-zoom", "rgraph-core", "rgraph"]
 resolver = "3"
 
 [workspace.package]

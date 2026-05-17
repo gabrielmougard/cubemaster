@@ -5,6 +5,13 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+# Enables the video → cube converter (requires system ffmpeg dev libs:
+#   sudo apt install libavutil-dev libavformat-dev libavcodec-dev libswscale-dev libswresample-dev
+# or `brew install ffmpeg` on macOS).
+video-converter = ["dep:ffmpeg-next"]
+
 [dependencies]
 cubemaster-shared = { workspace = true, features = ["std"] }
 dioxus = { version = "0.7.7", features = ["desktop", "router"] }
@@ -25,3 +32,14 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"
 heapless = { version = "0.8", features = ["serde"] }
 uuid = "1"
+
+# Studio dependencies (T-020 / T-020b)
+# ffmpeg-next 7.x targets FFmpeg 6.x (Ubuntu 24.04 default).
+# For FFmpeg 7.x, bump to ffmpeg-next = "8".
+ffmpeg-next = { version = "7", optional = true }
+rfd = "0.15"
+thiserror = "2"
+
+# base64 is used by the embedded WebGL cube viewer to ship texture data
+# from Rust to the JavaScript renderer running in the WebView.
+base64 = "0.22"

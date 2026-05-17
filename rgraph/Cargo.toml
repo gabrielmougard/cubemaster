@@ -1,0 +1,33 @@
+[package]
+name = "rgraph"
+description = "Dioxus port of @xyflow/react built on rgraph-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# Enables `serde` derive on the public types that mirror
+# `xyflow-react`'s JSON-shaped exports. `serde` itself is always
+# linked (used by the `dom::eval` bridge); this feature only flips
+# the corresponding `rgraph-core/serde` feature.
+serde-derive = ["rgraph-core/serde"]
+
+[dependencies]
+rgraph-core        = { path = "../rgraph-core" }
+rgraph-drag        = { path = "../rgraph-drag" }
+rgraph-interpolate = { path = "../rgraph-interpolate" }
+rgraph-selection   = { path = "../rgraph-selection" }
+rgraph-transition  = { path = "../rgraph-transition" }
+rgraph-zoom        = { path = "../rgraph-zoom" }
+
+dioxus     = { version = "0.7.7", features = ["desktop"] }
+# Always required: `serde` is used directly by the `dom::eval` bridge to
+# deserialise JS \u2192 Rust JSON return values. The `serde-derive`
+# feature additionally pipes through to `rgraph-core`'s `serde` feature.
+serde      = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing    = "0.1"
+
+[lib]
+doctest = false

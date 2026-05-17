@@ -1,2 +1,7 @@
 [env]
 DEFMT_LOG = "info"
+# bindgen (used by ffmpeg-sys-next) sometimes invokes clang without a
+# proper target triple, which causes it to look for the 32-bit C-library
+# stub headers that aren't installed on a 64-bit-only Ubuntu. Force the
+# host target so it stays on the 64-bit code path.
+BINDGEN_EXTRA_CLANG_ARGS = "--target=x86_64-unknown-linux-gnu"
