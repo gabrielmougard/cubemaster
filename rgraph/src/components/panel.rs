@@ -30,6 +30,19 @@ pub struct PanelProps {
     /// attributes.
     #[props(default)]
     pub data_message: Option<String>,
+    /// Generic passthrough attributes. Mirrors the TS `{...rest}`
+    /// spread on `HTMLAttributes`. Use this to wire `data-testid`,
+    /// `aria-label`, `role`, `aria-labelledby`, etc.
+    ///
+    /// ```ignore
+    /// Panel {
+    ///     position: PanelPosition::TopLeft,
+    ///     aria_label: "Mini map",
+    ///     "data-testid": "rf__minimap",
+    /// }
+    /// ```
+    #[props(extends = GlobalAttributes, extends = div)]
+    pub attributes: Vec<Attribute>,
     pub children: Element,
 }
 
@@ -79,6 +92,7 @@ pub fn Panel(props: PanelProps) -> Element {
                 class: "{classes}",
                 style: "{style}",
                 "data-message": "{msg}",
+                ..props.attributes,
                 {props.children}
             }
         }
@@ -87,6 +101,7 @@ pub fn Panel(props: PanelProps) -> Element {
             div {
                 class: "{classes}",
                 style: "{style}",
+                ..props.attributes,
                 {props.children}
             }
         }

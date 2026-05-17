@@ -1,7 +1,16 @@
 //! Port of `xyflow-react/src/additional-components/Controls/Icons/Plus.tsx`.
 //!
-//! Status: Phase 0 — stub.
-//!
-//! Inline SVG `Plus` icon component used by the Controls panel.
-//!
-//! TODO(rgraph/phase8): port this component.
+//! Status: Phase 8 — implemented.
+
+use dioxus::prelude::*;
+
+#[component]
+pub fn PlusIcon() -> Element {
+    rsx! {
+        svg {
+            xmlns: "http://www.w3.org/2000/svg",
+            "viewBox": "0 0 32 32",
+            path { d: "M32 18.133H18.133V32h-4.266V18.133H0v-4.266h13.867V0h4.266v13.867H32z" }
+        }
+    }
+}

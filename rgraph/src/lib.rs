@@ -182,6 +182,28 @@ pub use context::{provide_rgraph_store, try_use_rgraph_store, use_rgraph_store};
 pub use contexts::node_id::{provide_node_id, use_node_id, NodeIdCtx};
 pub use store::{initial_state, InitialStateParams, RGraphStore};
 
+// Phase 8 additional components.
+pub use additional_components::background::{
+    Background, BackgroundGap, BackgroundOffset, BackgroundProps, BackgroundVariant, DotPattern,
+    LinePattern,
+};
+pub use additional_components::controls::{
+    ControlButton, ControlButtonProps, Controls, ControlsFitViewOptions, ControlsOrientation,
+    ControlsProps, FitViewIcon, LockIcon, MinusIcon, PlusIcon, UnlockIcon,
+};
+pub use additional_components::edge_toolbar::{EdgeToolbar, EdgeToolbarProps};
+pub use additional_components::minimap::{
+    MiniMap, MiniMapNode, MiniMapNodeAttr, MiniMapNodes, MiniMapProps,
+};
+pub use additional_components::node_resizer::{
+    NodeResizeControl, NodeResizeControlProps, NodeResizer, NodeResizerCommon,
+    NodeResizerControlPosition, NodeResizerDirection, NodeResizerProps, NodeResizerVariant,
+    ResizeControlLine,
+};
+pub use additional_components::node_toolbar::{
+    NodeToolbar, NodeToolbarPortal, NodeToolbarProps, NodeToolbarTarget,
+};
+
 // System types/utils are re-exported from `rgraph_core`.
 // TS reference: lines 44–144 of `xyflow-react/src/index.ts`.
 pub use rgraph_core as core;

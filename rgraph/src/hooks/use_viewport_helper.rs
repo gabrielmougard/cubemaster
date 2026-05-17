@@ -22,9 +22,11 @@ use dioxus::prelude::ReadableExt;
 
 use rgraph_core::types::geometry::{Rect, Transform, XYPosition};
 use rgraph_core::types::viewport::{
-    FitBoundsOptions, Padding, SetCenterOptions, SnapGrid, Viewport, ViewportHelperFunctionOptions,
+    FitBoundsOptions, FitViewOptionsBase, Padding, SetCenterOptions, SnapGrid, Viewport,
+    ViewportHelperFunctionOptions,
 };
 use rgraph_core::utils::general::{get_viewport_for_bounds, point_to_renderer_point, renderer_point_to_point};
+use rgraph_core::utils::graph::{fit_viewport, FitViewportParams};
 
 use crate::context::use_rgraph_store;
 use crate::store::RGraphStore;
@@ -157,6 +159,38 @@ impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> ViewportHel
             }
         });
         let promise = pan_zoom.borrow_mut().set_viewport(viewport, transform_options);
+        promise.block_take().unwrap_or(false)
+    }
+
+    /// Fit the viewport to the visible nodes. Mirrors TS `fitView`.
+    ///
+    /// Reads `nodeLookup`, `transform`, `width`/`height`, `min_zoom`/
+    /// `max_zoom` from the store, delegates to
+    /// [`rgraph_core::utils::graph::fit_viewport`], and writes the
+    /// resulting viewport via the live `PanZoomInstance`. Returns
+    /// `false` if there is no `PanZoomInstance` yet (mount race) or
+    /// if no nodes are eligible.
+    pub fn fit_view(&self, options: Option<&FitViewOptionsBase>) -> bool {
+        let Some(pan_zoom) = self.store.pan_zoom.peek().clone() else {
+            return false;
+        };
+        let lookup = self.store.node_lookup.peek().clone();
+        let width = *self.store.width.peek();
+        let height = *self.store.height.peek();
+        let min_zoom = *self.store.min_zoom.peek();
+        let max_zoom = *self.store.max_zoom.peek();
+        let mut pan_zoom_ref = pan_zoom.borrow_mut();
+        let pan_zoom_dyn: &mut dyn rgraph_core::types::panzoom::PanZoomInstance =
+            &mut **pan_zoom_ref;
+        let params = FitViewportParams {
+            nodes: &lookup,
+            width,
+            height,
+            pan_zoom: pan_zoom_dyn,
+            min_zoom,
+            max_zoom,
+        };
+        let promise = fit_viewport(params, options);
         promise.block_take().unwrap_or(false)
     }
 

@@ -130,6 +130,26 @@ pub use crate::hooks::use_viewport_sync::use_viewport_sync;
 pub use crate::hooks::use_visible_edge_ids::use_visible_edge_ids;
 pub use crate::hooks::use_visible_node_ids::use_visible_node_ids;
 
+// Phase 8: additional components (Background, Controls, MiniMap,
+// NodeToolbar, EdgeToolbar, NodeResizer).
+pub use crate::additional_components::background::{
+    Background, BackgroundGap, BackgroundOffset, BackgroundProps, BackgroundVariant,
+};
+pub use crate::additional_components::controls::{
+    ControlButton, ControlButtonProps, Controls, ControlsOrientation, ControlsProps, FitViewIcon,
+    LockIcon, MinusIcon, PlusIcon, UnlockIcon,
+};
+pub use crate::additional_components::edge_toolbar::{EdgeToolbar, EdgeToolbarProps};
+pub use crate::additional_components::minimap::{
+    MiniMap, MiniMapNode, MiniMapNodeAttr, MiniMapNodes, MiniMapProps,
+};
+pub use crate::additional_components::node_resizer::{
+    NodeResizeControl, NodeResizeControlProps, NodeResizer, NodeResizerProps, ResizeControlLine,
+};
+pub use crate::additional_components::node_toolbar::{
+    NodeToolbar, NodeToolbarPortal, NodeToolbarProps, NodeToolbarTarget,
+};
+
 // Re-export the core's prelude-like items so consumers only need
 // `use rgraph::prelude::*` (instead of pulling from `rgraph_core` too).
 pub use rgraph_core as core;
