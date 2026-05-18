@@ -737,3 +737,533 @@ Decode to mono i16 at 48 kHz, then run the panning code above.
 5. Add your audio source (SD card / WiFi).
 
 This way you never need to write a software DSP or worry about real-time filter performance on the MCU — the ESP32-S3 just shuffles PCM and computes 4 multiplications per sample.
+
+**User - --**
+
+ok if I reduce to one woofer and two tweeters, is it possible to use only one amp board ? give me some product references
+
+**Assistant - --**
+
+# Yes — One Board for 2.1 (2 Tweeters + 1 Woofer)
+
+With **1 woofer + 2 tweeters** you have a classic **2.1 configuration** (stereo + sub), which is exactly what dozens of off-the-shelf amp boards are designed for. Total power: 2×10 W + 20 W = **40 W**, very comfortable.
+
+---
+
+## Two Viable Paths
+
+### Path A — All-in-one I²S amp with built-in DSP crossover ⭐ (recommended)
+
+One board, I²S straight from the ESP32-S3, DSP does the crossover. Minimal wiring, minimal Rust code.
+
+| Product | Power | Input | DSP | Notes |
+|---|---|---|---|---|
+| **Sure/Wondom JAB3 (2.1)** — `AA-JA33271` | 2×30 W + 60 W | I²S **or** analog | ADAU1701 SigmaDSP | Best fit. Configure crossover in SigmaStudio (free PC tool), flash to onboard EEPROM, then the board "just works". |
+| **Wondom JAB5** | 2×50 W + 100 W | I²S/analog | ADAU1701 | Bigger sibling, same DSP workflow. Overkill but cheap. |
+| **TI TAS5825MEVM** | 2×23 W + 1×45 W | I²S | Built-in biquads | Single TAS5825M chip in 2.1 mode. Configured via I²C from the ESP32 using a `.cfg` blob from PurePath Console. Dev board is pricey (~\$150–200); the bare chip is ~\$5 if you spin a PCB. |
+| **Dayton Audio KABD-430** | 4×30 W | I²S/Bluetooth | ADAU1701 | 4-channel; you'd bridge 2 channels for the woofer. Has a nice USB tuning interface. |
+
+> **Pick the JAB3** if you want the easiest path. ADI's SigmaStudio is a drag-and-drop DSP designer — you literally drop in a "2.1 crossover" block, set 200 Hz, and click "write to EEPROM". Done forever.
+
+### Path B — Cheap & cheerful: I²S DAC + analog 2.1 amp
+
+Two small boards, no DSP. You do the crossover in software on the ESP32-S3 (or just send full-band to each output and rely on driver roll-off — works surprisingly well for full-range "tweeters" like the W3-881SI).
+
+| Component | Product | ~Price |
+|---|---|---|
+| I²S DAC (stereo) | **PCM5102A** breakout (Adafruit `#3678` or generic) | \$3–8 |
+| 2.1 amplifier | **TPA3116D2 2.1 board** (search "TPA3116 2.1 50W+2x25W") | \$10–15 |
+| PSU | 19–24 V / 4 A laptop brick | \$10 |
+
+The DAC's stereo out feeds the 2.1 board's L/R analog inputs; the board's onboard sub-channel sums L+R through a fixed low-pass (usually ~150 Hz) into the bridged sub amp.
+
+**Catch:** the sub channel gets a mono mix of both tweeter channels, so true spatial separation only exists in the tweeters — which is correct anyway (sub-200 Hz isn't directional).
+
+---
+
+## Architecture Comparison
+
+```
+PATH A (recommended):
+ESP32-S3 ──I²S──► JAB3 2.1 ──► [Tweeter L]
+              └─I²C(opt)─┤   ──► [Tweeter R]
+                         └──► [Woofer]
+            (DSP crossover lives inside the board)
+
+PATH B (cheapest):
+ESP32-S3 ──I²S──► PCM5102 DAC ──L/R analog──► TPA3116 2.1 ──► [Tw L]
+                                                          ──► [Tw R]
+                                                          ──► [Woofer, internal LPF]
+```
+
+---
+
+## What Changes in Your Rust/Embassy Code
+
+Massively simpler than the 5-channel TDM version:
+
+```rust
+// Standard stereo I²S, 48 kHz, 16-bit — esp-hal default config works.
+fn render_frame(out: &mut [i16; 2], source_angle_deg: f32) {
+    let s = decode_next_mono_sample() as f32;
+    // Equal-power stereo pan, -90°..+90° mapped to L..R
+    let t = (source_angle_deg.clamp(-90.0, 90.0) + 90.0) / 180.0; // 0..1
+    let l_gain = ((1.0 - t) * core::f32::consts::FRAC_PI_2).cos();
+    let r_gain = (t * core::f32::consts::FRAC_PI_2).sin();
+    out[0] = (s * l_gain) as i16;
+    out[1] = (s * r_gain) as i16;
+}
+```
+
+That's the entire spatial logic. The amp board (Path A) splits low frequencies to the woofer internally; you never think about crossovers in firmware.
+
+<details>
+<summary><b>If you go Path B and want a software crossover anyway</b></summary>
+
+A 2nd-order Linkwitz-Riley at 200 Hz is just two biquads. With Path B, though, the TPA3116 2.1 board already has a hardware LPF for its sub channel, and your "tweeters" (W3-881SI) naturally roll off below ~150 Hz, so doing nothing in software is fine.
+
+</details>
+
+<details>
+<summary><b>ESP32-S3 dev board pin notes for I²S</b></summary>
+
+Any 3 free GPIOs work. Typical assignment:
+- `BCLK` → GPIO 5
+- `LRCLK` / `WS` → GPIO 6
+- `DOUT` → GPIO 7
+
+Plus `GND` common with the amp board. Power the amp from its own 19–24 V brick; only share ground, not 3.3 V/5 V rails.
+
+</details>
+
+<details>
+<summary><b>Where to buy (May 2026)</b></summary>
+
+- **Wondom JAB3 / JAB5**: parts-express.com, Sure Electronics direct, or AliExpress (search "Wondom JAB3 2.1").
+- **Dayton KABD-430**: parts-express.com, Madisound.
+- **TAS5825MEVM**: ti.com or Mouser/Digi-Key.
+- **PCM5102 + TPA3116 2.1**: Amazon, AliExpress — extremely common.
+
+</details>
+
+---
+
+## My Recommendation
+
+**Buy a Wondom JAB3 (≈ \$35).** It collapses your entire signal chain — DAC, DSP crossover, 2.1 amplifier — into one I²S-fed board. Your ESP32-S3 firmware becomes a trivial stereo panner, and you can re-tune the crossover later in SigmaStudio without touching Rust at all.
+
+**Assistant - --**
+
+Yes — you can do this **without a separate audio processor** if your goal is mainly:
+
+- play audio files / streams,
+- split bands into woofer vs tweeters,
+- send different channels to different speakers for spatial placement,
+- and you **don’t need real-time DSP effects** beyond basic EQ/crossover/panning.
+
+For your setup, the cleanest architecture is:
+
+1. **ESP32-S3** generates or streams audio as **I2S**
+2. A **multi-channel I2S DAC** converts to analog
+3. One or more **multi-channel class-D amplifier boards** drive the speakers
+4. A passive or digital crossover handles band splitting
+
+<details>
+<summary><strong>Short answer first</strong></summary>
+
+- **Best practical solution:** use a **4-channel or 6-channel class-D amp solution**, not a single tiny amp chip.
+- **Do you need a separate audio processor?**  
+  **No**, not if you only need fixed band routing and simple spatial playback.
+- **Firmware in Rust/embassy:**  
+  Use **I2S audio output**, feed PCM frames, and optionally do a simple software crossover / routing in Rust.
+- **Can one amp board work for 1 woofer + 2 tweeters?**  
+  **Yes**, if it is a **2.1 / 3-channel / 4-channel amp board** with enough power and proper crossover.
+- **For 1 woofer + 4 tweeters:**  
+  Usually better to use **2 amp boards** or one board with **4+ channels**.
+
+</details>
+
+---
+
+## 1) Important design choice: don’t drive tweeters full-range
+
+Even if the tweeters are only $10\text{W}$ each, they should **not** receive full-band audio.
+
+You want:
+
+- **woofer:** low to low-mid frequencies
+- **tweeters:** high-pass filtered audio only
+
+That means you need either:
+
+- **passive crossover components**, or
+- **digital crossover in firmware**, or
+- a mix of both
+
+For spatial sound, the easiest path is often:
+
+- **one mono woofer channel**
+- **2 or 4 tweeter channels**
+- simple **high-pass** on tweeters, low-pass on woofer
+
+---
+
+## 2) Recommended hardware architectures
+
+### Option A: simplest and robust — stereo/2.1 class-D amp board
+Good if you reduce to **1 woofer + 2 tweeters** and don’t need independent tweeter channels.
+
+You can wire:
+
+- one amp channel for woofer
+- one amp channel for a tweeter pair
+- use passive crossover for the tweeters
+
+This is the easiest if you want minimal hardware.
+
+#### Good amp board types
+- **TPA3116D2 2.1 board**
+- **TPA3118 2.1 board**
+- **TPA3116D2 2x50W + 1x100W 2.1 boards**
+
+These are common, cheap, and easy to find.
+
+#### Caveat
+A normal 2.1 board is meant for:
+- left
+- right
+- subwoofer
+
+Not for 1 woofer + multiple tweeters as separate spatial channels.  
+But it works well if you just want **one woofer + tweeter pair**.
+
+---
+
+### Option B: best for your spatial idea — multi-channel amp board
+If you want:
+- 1 woofer
+- 4 tweeters
+- each tweeter has its own spatial channel
+
+then look for:
+
+- **4-channel class-D amplifier**
+- or **2x stereo amp boards**
+- or **5.1 / 6-channel boards**
+
+#### Practical approach
+- **Woofer:** one channel
+- **Tweeters:** 4 separate channels
+
+This gives you actual spatial control.
+
+#### Product families to look at
+- **TPA3116D2 multi-channel modules**
+- **TPA3118 multi-channel modules**
+- **TPA3110-based boards**
+- **TPA3245 / TPA3251 / TPA3255 boards** if you want higher quality and more power headroom
+
+For your power levels, **TPA3116D2** is usually the sweet spot.
+
+---
+
+## 3) Do you need a separate audio processor?
+
+### No, if:
+- you are just playing PCM audio,
+- splitting bands in software,
+- and routing fixed spatial channels.
+
+### Maybe yes, if:
+- you want advanced room correction,
+- dynamic EQ,
+- beamforming,
+- convolution reverb,
+- or complex mixing of many streams.
+
+For your use case, **ESP32-S3 + firmware DSP is enough**.
+
+---
+
+## 4) Recommended signal chain
+
+### Best practical chain
+```text
+Audio source file/stream
+        ->
+ESP32-S3 (Rust firmware, PCM decode/mixing)
+        ->
+I2S DAC or I2S amp
+        ->
+Multi-channel class-D amplifier
+        ->
+Woofer + tweeters
+```
+
+### Two variants
+
+#### Variant 1: I2S DAC + analog amp
+- ESP32-S3 outputs I2S PCM
+- DAC makes analog line-out
+- analog line goes to amp inputs
+
+Good if you want flexibility.
+
+#### Variant 2: I2S digital amp module
+- ESP32-S3 outputs I2S directly into an amplifier with built-in DAC/amp path
+- simpler wiring
+- fewer components
+
+For multi-channel, **Variant 1 is often easier**, because there are more stereo DACs than multi-channel direct-digital amp boards.
+
+---
+
+## 5) Hardware product references
+
+### For 1 woofer + 2 tweeters
+A **2.1 amp board** is enough if you’re okay with the tweeters sharing a channel or being passively split.
+
+#### Good reference boards
+- **TPA3116D2 2.1 amplifier board**
+- **TPA3118 2.1 amplifier board**
+- Boards marketed as:
+  - `2.1 channel class D amplifier`
+  - `50W + 50W + 100W`
+  - `subwoofer amplifier board`
+
+These are widely available on Amazon, AliExpress, and eBay.
+
+#### DAC references
+- **PCM5102A I2S DAC module**
+- **ES9023 / PCM5122 boards** if you want a nicer DAC
+- **MAX98357A** only if you want a tiny mono amp, but it is **not enough** for your full system
+
+---
+
+### For 1 woofer + 4 tweeters
+You want either:
+
+- **2x stereo amp boards**  
+  one for woofer + two tweeters, one for two tweeters
+- or **one 4-channel amp board**
+- or **one 5.1 board** using only the needed channels
+
+#### Good amplifier chip families
+- `TPA3116D2`
+- `TPA3118`
+- `TPA3251`
+- `TPA3255`
+
+For your power budget, **TPA3116D2** is usually fine.
+
+---
+
+## 6) Power ratings: what to aim for
+
+You said:
+
+- 4 tweeters at max $10\text{W}$ each
+- 1 woofer at max $20\text{W}$
+
+That does **not** mean you need a $60\text{W}$ amp per speaker.  
+It means you need:
+
+- enough headroom,
+- but not huge power.
+
+A sane design target is:
+
+- **woofer amp channel:** $20$–$30\text{W}$ clean power
+- **each tweeter channel:** $2$–$8\text{W}$ typical
+- overall amp supply: $24\text{V}$ recommended if using TPA3116/TPA325x boards
+
+If you use a board with too much power, you can still be safe by:
+- limiting gain,
+- limiting digital level in firmware,
+- and using proper crossover caps.
+
+---
+
+## 7) Firmware logic in Rust with `embassy`
+
+Since you use `embassy`, the firmware can be organized like this:
+
+### Core tasks
+1. **Audio source task**
+   - decode WAV/MP3/Opus or receive PCM frames
+2. **Mixer/router task**
+   - split into bands
+   - apply panning/spatial routing
+   - apply volume scaling
+3. **I2S output task**
+   - write PCM frames to the DAC or amp
+
+---
+
+### Minimal signal processing
+You said you don’t want to alter sound at runtime much. Great. Then keep it simple:
+
+- **low-pass filter** for woofer
+- **high-pass filter** for tweeters
+- optional **per-channel gain**
+- optional **time delay** for spatial effect
+
+That’s enough for a spatial device.
+
+---
+
+### Spatial effect idea
+If you have 4 tweeters around the cube:
+
+- front tweeter louder when source is in front
+- left tweeter louder when source pans left
+- right tweeter louder when source pans right
+- rear tweeter louder when source is behind
+
+This can be done with simple gains:
+
+```text
+channel_gain = base_gain * spatial_weight
+```
+
+If you want more realism, add tiny delays:
+
+- $0$ to $1.5\text{ms}$ max
+- very small delay differences
+- avoid comb filtering
+
+---
+
+## 8) Example firmware architecture in Rust
+
+### High-level loop
+```rust
+loop {
+    let frame = decode_next_audio_frame();
+    let low = low_pass_filter(frame);
+    let high = high_pass_filter(frame);
+
+    woofer_out = low * woofer_gain;
+
+    tweeter_fl = high * front_left_gain;
+    tweeter_fr = high * front_right_gain;
+    tweeter_rl = high * rear_left_gain;
+    tweeter_rr = high * rear_right_gain;
+
+    i2s_write([woofer_out, tweeter_fl, tweeter_fr, tweeter_rl, tweeter_rr]);
+}
+```
+
+If your output hardware is stereo only, then you’d need:
+- external analog summing,
+- or a board with more channels.
+
+---
+
+## 9) Important caveat: ESP32-S3 audio output channels
+
+The ESP32-S3 does **not** magically give you many analog outputs.  
+You’ll likely need one of these:
+
+- **I2S DAC module** with multiple outputs, or
+- **external multi-channel audio codec**, or
+- **multiple I2S DACs**, or
+- **DSP in software plus analog amp inputs**
+
+If you want **true multi-channel spatial audio**, the most straightforward hardware is:
+
+- **ESP32-S3**
+- **I2S stereo or multi-channel codec**
+- **multiple amp channels**
+
+---
+
+## 10) Can one amp board drive 1 woofer + 2 tweeters?
+
+### Yes, if:
+- the board has enough channels,
+- and the tweeters are wired intelligently.
+
+#### Easiest wiring
+- one channel = woofer
+- one channel = tweeter pair with passive crossover
+
+This is possible with a **2.1 amp board**, but not ideal if the tweeters need independent spatial placement.
+
+### If you want actual spatial separation
+Use:
+- one channel for woofer
+- one channel per tweeter
+
+So for 2 tweeters + 1 woofer, a **3-channel amp solution** is ideal.  
+For 4 tweeters + 1 woofer, a **5-channel solution** is ideal.
+
+Those are less common than 2.1 boards, so people often use:
+- two stereo boards,
+- or one 2.1 board plus one stereo board.
+
+---
+
+## 11) My practical recommendation
+
+### If you reduce to 1 woofer + 2 tweeters
+Use:
+- **one TPA3116D2 2.1 board**
+- **one PCM5102A I2S DAC**
+- **passive crossover on tweeters**
+- **Rust firmware with simple band split and panning**
+
+This is the easiest good solution.
+
+### If you keep 1 woofer + 4 tweeters
+Use:
+- **two stereo TPA3116D2 boards**
+  - one board for woofer + 1 tweeter pair
+  - another for the other tweeter pair
+- or **one 5-channel / 5.1 amplifier solution** if you can find a decent one
+
+---
+
+## 12) Specific product references to search for
+
+### Amplifier boards
+- `TPA3116D2 2.1 amplifier board`
+- `TPA3116D2 2 channel amplifier board`
+- `TPA3118 2.1 amplifier board`
+- `TPA3251 amplifier board`
+- `TPA3255 amplifier board`
+
+### I2S DAC boards
+- `PCM5102A I2S DAC module`
+- `PCM5122 I2S DAC module`
+
+### Tiny direct amp modules
+- `MAX98357A I2S amplifier`
+- `NS4168 I2S amplifier board`
+
+The tiny ones are okay for demos, but **not ideal for your woofer plus multiple tweeters**.
+
+---
+
+## 13) My final recommendation
+
+If you want the **best balance of simplicity, sound quality, and buildability**:
+
+### For 1 woofer + 2 tweeters
+- **Amp:** `TPA3116D2 2.1 board`
+- **DAC:** `PCM5102A`
+- **Firmware:** Rust/embassy audio router with low/high-pass split
+- **Crossover:** passive on tweeters or simple DSP crossover
+
+### For 1 woofer + 4 tweeters
+- **Amp:** 2x `TPA3116D2` stereo boards, or a true multi-channel amp
+- **DAC:** `PCM5102A` or `PCM5122`
+- **Firmware:** simple per-channel gain matrix + optional tiny delays
+
+---
+
+If you want, I can next give you:
+
+1. a **concrete wiring diagram** for ESP32-S3 + amp board(s), or  
+2. a **Rust/embassy audio task skeleton**, or  
+3. a **channel mapping plan** for 1 woofer + 2 or 4 tweeters.
