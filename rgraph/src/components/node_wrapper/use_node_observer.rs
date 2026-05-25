@@ -85,8 +85,54 @@ pub(crate) fn apply_dimension_update<N, E>(
     N: Clone + PartialEq + 'static,
     E: Clone + PartialEq + 'static,
 {
+    use rgraph_core::types::geometry::Position;
     use rgraph_core::types::nodes::MeasuredDimensions;
+    use rgraph_core::utils::dom::HandleMeasurement;
     use rgraph_core::utils::store::{update_node_internals, UpdateNodesOptions};
+
+    // Synthesize handle measurements for the built-in node types so
+    // edges have something to attach to. The real `useNodeObserver`
+    // upstream does a `querySelectorAll('.source')` / `'.target'` on
+    // the node's DOM subtree; the Dioxus port doesn't yet bridge that,
+    // so we fall back to the canonical positions emitted by
+    // `<DefaultNode>` / `<InputNode>` / `<OutputNode>`.
+    let node_type = {
+        use dioxus::prelude::ReadableExt;
+        let lookup = store.node_lookup.peek();
+        lookup
+            .get(node_id)
+            .and_then(|n| n.user.type_.clone())
+            .unwrap_or_else(|| "default".to_string())
+    };
+    // We synthesise *zero-sized* handle bounds anchored exactly on the
+    // node's edge. The visible handle dot (sized via CSS) sits on top
+    // of this point thanks to `.react-flow__handle-{top,bottom,…}` and
+    // its `transform: translate(...)` centering. Using 0×0 here makes
+    // `get_handle_position` return exactly the boundary point instead
+    // of "boundary + half-handle", so the edge meets the handle dot
+    // visually instead of leaving a gap.
+    let bottom = HandleMeasurement {
+        id: None,
+        position: Position::Bottom,
+        bounds_left: dim.width / 2.0,
+        bounds_top: dim.height,
+        width: 0.0,
+        height: 0.0,
+    };
+    let top = HandleMeasurement {
+        id: None,
+        position: Position::Top,
+        bounds_left: dim.width / 2.0,
+        bounds_top: 0.0,
+        width: 0.0,
+        height: 0.0,
+    };
+    let (source_handles, target_handles) = match node_type.as_str() {
+        "input" => (vec![bottom.clone()], Vec::new()),
+        "output" => (Vec::new(), vec![top.clone()]),
+        "group" => (Vec::new(), Vec::new()),
+        _ => (vec![bottom.clone()], vec![top.clone()]),
+    };
 
     let updates = vec![CoreInternalNodeUpdate {
         id: node_id.to_string(),
@@ -94,8 +140,8 @@ pub(crate) fn apply_dimension_update<N, E>(
         dimensions: dim,
         node_bounds_left: 0.0,
         node_bounds_top: 0.0,
-        source_handles: Vec::new(),
-        target_handles: Vec::new(),
+        source_handles,
+        target_handles,
     }];
 
     let zoom = store.transform.peek().scale();

@@ -10,6 +10,7 @@ mod wifi;
 use dioxus::prelude::*;
 use views::dashboard::DashboardView;
 use views::discover::DiscoverView;
+use views::scenario::ScenarioView;
 use views::settings::SettingsView;
 
 fn main() {
@@ -229,6 +230,8 @@ pub enum Route {
     Discover,
     #[route("/dashboard")]
     Dashboard,
+    #[route("/scenario")]
+    Scenario,
     #[route("/settings")]
     Settings,
 }
@@ -241,6 +244,11 @@ fn Discover() -> Element {
 #[component]
 fn Dashboard() -> Element {
     rsx! { DashboardView {} }
+}
+
+#[component]
+fn Scenario() -> Element {
+    rsx! { ScenarioView {} }
 }
 
 #[component]

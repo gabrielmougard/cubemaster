@@ -165,6 +165,24 @@ pub fn ZoomPane<
                 store.dom_node_id.clone().set(Some(id));
 
                 let engine = Rc::new(panzoom);
+
+                // Wire the zoom-event listener that syncs the engine's
+                // transform into `store.transform` so the `<Viewport>`
+                // div re-renders on every pan / zoom tick. xypanzoom's
+                // `update()` doesn't install this in the Rust port —
+                // without it, dragging the pane (and the minimap) does
+                // nothing visible.
+                let store_for_zoom = store;
+                engine.on_zoom_event("zoom", move |evt: &rgraph_zoom::ZoomEvent<(), ()>| {
+                    use dioxus::prelude::WritableExt;
+                    let t = Transform::new(
+                        evt.transform.x,
+                        evt.transform.y,
+                        evt.transform.k,
+                    );
+                    store_for_zoom.transform.clone().set(t);
+                });
+
                 engine_signal.set(Some(engine.clone()));
 
                 // Push the trait-object adapter into the store too so
@@ -244,9 +262,104 @@ pub fn ZoomPane<
     };
 
     let on_pointer_down = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Down);
-    let on_pointer_move = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Move);
-    let on_pointer_up = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Up);
-    let on_pointer_cancel = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Cancel);
+    let on_pointer_move_inner = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Move);
+    let on_pointer_up_inner = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Up);
+    let on_pointer_cancel_inner = make_pointer_handler(engine_signal, bounds_signal, PointerEventKind::Cancel);
+
+    // Layer a connection-line state updater on top of the pan/zoom
+    // pointer handlers so `<ConnectionLine>` can draw a live preview
+    // from the source handle to the cursor while the user drags.
+    let store_for_move = store;
+    let mut on_pointer_move_inner = on_pointer_move_inner;
+    let on_pointer_move = move |evt: Event<PointerData>| {
+        use dioxus::html::point_interaction::InteractionLocation;
+        use dioxus::prelude::{ReadableExt, WritableExt};
+        use rgraph_core::types::connection::ConnectionState;
+        use rgraph_core::types::geometry::XYPosition;
+        // IMPORTANT: bind the cloned value to a local *before* we
+        // touch the signal again — `peek()` returns a `Ref<…>` whose
+        // lifetime in an `if let` scrutinee extends to the end of the
+        // `if` body. Calling `.set(…)` inside that scope while the
+        // read guard is still alive triggers `AlreadyBorrowed`.
+        let conn_snapshot = store_for_move.connection.peek().clone();
+        if let ConnectionState::InProgress(mut p) = conn_snapshot {
+            let client = evt.client_coordinates();
+            let bbox = *store_for_move.dom_bbox.peek();
+            p.to = XYPosition::new(client.x - bbox.x, client.y - bbox.y);
+            p.pointer = XYPosition::new(client.x, client.y);
+            store_for_move
+                .connection
+                .clone()
+                .set(ConnectionState::InProgress(p));
+        }
+        on_pointer_move_inner(evt);
+    };
+
+    let store_for_up = store;
+    let mut on_pointer_up_inner = on_pointer_up_inner;
+    let on_pointer_up = move |evt: Event<PointerData>| {
+        use dioxus::prelude::{ReadableExt, WritableExt};
+        use rgraph_core::types::connection::ConnectionState;
+        // Pane-level pointer-up only fires when the release did NOT
+        // happen on a handle (handle's own onpointerup `stop_propagation`s).
+        // That means the user either:
+        //   * was dragging a connection and dropped it on empty canvas, or
+        //   * had a click-to-connect "first click" pending and clicked
+        //     somewhere off-handle to cancel it.
+        // Either way we clear both the in-progress preview and the
+        // sticky "click-connecting" handle so the next attempt starts
+        // from a clean slate (otherwise the source dot stays yellow
+        // and new drags from elsewhere get rejected).
+        let in_progress = matches!(
+            &*store_for_up.connection.peek(),
+            ConnectionState::InProgress(_)
+        );
+        if in_progress {
+            store_for_up
+                .connection
+                .clone()
+                .set(ConnectionState::NoConnection);
+        }
+        let has_click_start = store_for_up
+            .connection_click_start_handle
+            .peek()
+            .is_some();
+        if has_click_start {
+            store_for_up
+                .connection_click_start_handle
+                .clone()
+                .set(None);
+        }
+        on_pointer_up_inner(evt);
+    };
+
+    let store_for_cancel = store;
+    let mut on_pointer_cancel_inner = on_pointer_cancel_inner;
+    let on_pointer_cancel = move |evt: Event<PointerData>| {
+        use dioxus::prelude::{ReadableExt, WritableExt};
+        use rgraph_core::types::connection::ConnectionState;
+        let in_progress = matches!(
+            &*store_for_cancel.connection.peek(),
+            ConnectionState::InProgress(_)
+        );
+        if in_progress {
+            store_for_cancel
+                .connection
+                .clone()
+                .set(ConnectionState::NoConnection);
+        }
+        let has_click_start = store_for_cancel
+            .connection_click_start_handle
+            .peek()
+            .is_some();
+        if has_click_start {
+            store_for_cancel
+                .connection_click_start_handle
+                .clone()
+                .set(None);
+        }
+        on_pointer_cancel_inner(evt);
+    };
 
     let style = "position:absolute;width:100%;height:100%;top:0;left:0;";
 

@@ -7,6 +7,7 @@ use crate::Route;
 pub enum NavItem {
     Discover,
     Dashboard,
+    Scenario,
     Settings,
 }
 
@@ -15,6 +16,7 @@ impl NavItem {
         match self {
             NavItem::Discover => Route::Discover,
             NavItem::Dashboard => Route::Dashboard,
+            NavItem::Scenario => Route::Scenario,
             NavItem::Settings => Route::Settings,
         }
     }
@@ -41,6 +43,11 @@ pub fn Sidebar(active: NavItem) -> Element {
                     active: active == NavItem::Dashboard,
                 }
                 SidebarItem {
+                    item: NavItem::Scenario,
+                    label: "Scenario",
+                    active: active == NavItem::Scenario,
+                }
+                SidebarItem {
                     item: NavItem::Settings,
                     label: "Settings",
                     active: active == NavItem::Settings,
@@ -48,6 +55,7 @@ pub fn Sidebar(active: NavItem) -> Element {
             }
 
             div { class: "sidebar-footer",
+                span { class: "experimental-tag", "experimental" }
                 span { class: "version-text", "v0.1.0" }
             }
         }
@@ -69,9 +77,13 @@ fn SidebarItem(item: NavItem, label: &'static str, active: bool) -> Element {
             match item {
                 NavItem::Discover => rsx! { IconSearch { class: "nav-icon".to_string() } },
                 NavItem::Dashboard => rsx! { IconCube { class: "nav-icon".to_string() } },
+                NavItem::Scenario => rsx! { IconScenario { class: "nav-icon".to_string() } },
                 NavItem::Settings => rsx! { IconSettings { class: "nav-icon".to_string() } },
             }
             span { class: "nav-label", "{label}" }
+            if matches!(item, NavItem::Scenario) {
+                span { class: "nav-badge-exp", "exp" }
+            }
         }
     }
 }

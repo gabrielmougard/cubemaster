@@ -43,3 +43,7 @@ thiserror = "2"
 # base64 is used by the embedded WebGL cube viewer to ship texture data
 # from Rust to the JavaScript renderer running in the WebView.
 base64 = "0.22"
+
+# Experimental "Scenario editor" : node-graph editor for game scenarios
+rgraph      = { path = "../rgraph" }
+rgraph-core = { path = "../rgraph-core" }

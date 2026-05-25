@@ -129,11 +129,30 @@ pub fn FlowRenderer<
         UseKeyPressOptions::default(),
     );
 
-    // Global delete + multi-selection wiring.
-    let _global = use_global_key_handler::<N, E>(
+    // Global delete + multi-selection wiring. The hook itself just
+    // installs the key-press subscribers; the side-effects (deleting
+    // selected nodes/edges, mirroring multi-selection into the store)
+    // are bare functions on the returned `effects` bundle, which we
+    // wire here via `use_effect` so they fire on every key edge.
+    let (global, effects) = use_global_key_handler::<N, E>(
         props.delete_key_code.clone(),
         props.multi_selection_key_code.clone(),
     );
+    {
+        let delete_pressed = global.delete.pressed;
+        let effects = effects;
+        use_effect(move || {
+            if *delete_pressed.read() {
+                effects.run_delete();
+            }
+        });
+    }
+    {
+        let multi_pressed = global.multi_selection.pressed;
+        use_effect(move || {
+            effects.run_multi_selection(*multi_pressed.read());
+        });
+    }
 
     let selection_key_pressed = *selection_key.pressed.read();
     let pan_key_pressed = *pan_activation_key.pressed.read();

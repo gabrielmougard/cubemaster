@@ -7,7 +7,7 @@
 pub mod use_node_observer;
 pub mod utils;
 
-use dioxus::events::{KeyboardData, MouseData};
+use dioxus::events::{KeyboardData, MouseData, PointerData};
 use dioxus::html::input_data::keyboard_types::Modifiers;
 use dioxus::html::point_interaction::ModifiersInteraction;
 use dioxus::prelude::*;
@@ -26,6 +26,7 @@ use crate::components::nodes::output_node::OutputNode;
 use crate::components::nodes::utils::{handle_node_click, HandleNodeClickArgs};
 use crate::context::use_rgraph_store;
 use crate::contexts::node_id::provide_node_id;
+use crate::hooks::use_drag::{use_drag, UseDragParams};
 use crate::hooks::use_move_selected_nodes::{use_move_selected_nodes, MoveSelectedNodesParams};
 use crate::store::RGraphStore;
 use crate::types::nodes::{
@@ -128,9 +129,21 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
     let dimensions = get_node_dimensions(&internal);
     let inline_dims = get_node_inline_style_dimensions(&internal);
 
-    // Phase-5 drag stub. Phase-5+ will replace this with a live
-    // `Signal<bool>` driven by the real `use_drag` integration.
-    let dragging = false;
+    // Wire the drag engine. `use_drag` returns pointer-event callbacks
+    // we attach to the wrapper div, plus a `Signal<bool>` reflecting
+    // the active-drag state for class-name composition.
+    let drag_api = use_drag::<N, ()>(
+        UseDragParams {
+            disabled: !is_draggable,
+            no_drag_class_name: Some(props.no_drag_class_name.clone()),
+            handle_selector: None,
+            node_id: Some(props.id.clone()),
+            is_selectable,
+            node_click_distance: Some(props.node_click_distance),
+        },
+        store.dom_bbox,
+    );
+    let dragging = *drag_api.dragging.read();
 
     // Z-index + transform inline style. Mirrors TS lines 203–210.
     let mut style = format!(
@@ -186,24 +199,38 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
     let observer = use_node_observer::<N, ()>(node_id_for_observer);
     let on_mounted = observer.on_mounted;
 
-    // Click handler: TS lines 108–126.
+    // Click handler.
+    // The Cmd/Ctrl modifier on the click is mirrored into
+    // `multi_selection_active` for the duration of the action so the
+    // store's selection helpers treat this click as a multi-select.
+    // (The global Cmd/Ctrl key listener that should drive this is a
+    // Phase-3 stub.)
     let on_click = {
         let id = props.id.clone();
         let user_node = internal.user.clone();
         let on_click = props.on_click;
         move |event: Event<MouseData>| {
-            let select_nodes_on_drag = *store.select_nodes_on_drag.peek();
-            let node_drag_threshold = *store.node_drag_threshold.peek();
+            use dioxus::prelude::{ReadableExt, WritableExt};
+            // Stop click from bubbling to `<Pane>::onclick`, which would
+            // otherwise call `store.reset_selected_elements()` and
+            // undo the selection we're about to make.
+            event.stop_propagation();
+            if is_selectable {
+                let mods = event.modifiers();
+                let multi = mods.contains(Modifiers::META) || mods.contains(Modifiers::CONTROL);
+                let prev_multi = *store.multi_selection_active.peek();
+                if multi != prev_multi {
+                    store.multi_selection_active.clone().set(multi);
+                }
 
-            // Only call `handle_node_click` from here when the
-            // drag-start path will _not_ have called it on our behalf
-            // (TS line 111).
-            if is_selectable && (!select_nodes_on_drag || !is_draggable || node_drag_threshold > 0.0) {
                 handle_node_click(HandleNodeClickArgs::<N, ()> {
                     id: id.clone(),
                     store,
                     unselect: false,
                 });
+                if !multi && prev_multi {
+                    store.multi_selection_active.clone().set(false);
+                }
             }
             if let Some(cb) = on_click {
                 cb.call(NodeMouseHandlerArgs {
@@ -233,6 +260,18 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
                 return;
             }
             let key = evt.key().to_string();
+            // Backspace / Delete: remove every selected node + edge.
+            // See the comment on the same branch in `EdgeWrapper` —
+            // the global key listener that should drive this is a
+            // Phase-3 stub, so we route through per-element keydown.
+            if key == "Backspace" || key == "Delete" {
+                evt.prevent_default();
+                crate::hooks::use_global_key_handler::GlobalKeyHandlerEffects::<N, ()> {
+                    store,
+                }
+                .run_delete();
+                return;
+            }
             // Selection keys: Enter, Space, Escape.
             const SELECT_KEYS: &[&str] = &["Enter", " ", "Escape"];
             if SELECT_KEYS.contains(&key.as_str()) && is_selectable {
@@ -316,6 +355,45 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
         BuiltInNodeType::Default => rsx! { DefaultNode { ..inner_props.clone() } },
     };
 
+    // Pointer-capture wraps the four drag handlers so the cursor stays
+    // glued to the node element even when the user yanks the mouse off
+    // the node's box mid-drag. Without this, the wrapper stops receiving
+    // pointermove the instant the cursor leaves its rect and the node
+    // visibly lags behind the cursor. Wrapped in `Callback` (which is
+    // `Copy`) so the same handler can be attached in both rendering
+    // branches below.
+    let capture_selector = format!("[data-id=\"{}\"]", props.id);
+    let cap_for_down = capture_selector.clone();
+    let cap_for_up = capture_selector.clone();
+    let cap_for_cancel = capture_selector;
+
+    let drag_pointer_down_inner = drag_api.on_pointer_down;
+    let drag_pointer_move = drag_api.on_pointer_move;
+    let drag_pointer_up_inner = drag_api.on_pointer_up;
+    let drag_pointer_cancel_inner = drag_api.on_pointer_cancel;
+
+    let drag_pointer_down: Callback<Event<PointerData>> = use_callback(move |e: Event<PointerData>| {
+        // Stop pointerdown from bubbling to `<ZoomPane>`, otherwise the
+        // pan/zoom engine starts a viewport-pan in lockstep with the
+        // node drag (both shift by the same delta and the node appears
+        // not to move). It also eats the subsequent `click` that would
+        // normally select the node.
+        e.stop_propagation();
+        let pid = e.pointer_id();
+        crate::dom::pointer::set_pointer_capture(&cap_for_down, pid);
+        drag_pointer_down_inner.call(e);
+    });
+    let drag_pointer_up: Callback<Event<PointerData>> = use_callback(move |e: Event<PointerData>| {
+        let pid = e.pointer_id();
+        crate::dom::pointer::release_pointer_capture(&cap_for_up, pid);
+        drag_pointer_up_inner.call(e);
+    });
+    let drag_pointer_cancel: Callback<Event<PointerData>> = use_callback(move |e: Event<PointerData>| {
+        let pid = e.pointer_id();
+        crate::dom::pointer::release_pointer_capture(&cap_for_cancel, pid);
+        drag_pointer_cancel_inner.call(e);
+    });
+
     if let Some(idx) = tab_index {
         rsx! {
             div {
@@ -336,6 +414,10 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
                 onmouseleave: on_mouse_leave,
                 oncontextmenu: on_context_menu,
                 onkeydown: on_key_down,
+                onpointerdown: move |e: Event<PointerData>| drag_pointer_down.call(e),
+                onpointermove: move |e: Event<PointerData>| drag_pointer_move.call(e),
+                onpointerup: move |e: Event<PointerData>| drag_pointer_up.call(e),
+                onpointercancel: move |e: Event<PointerData>| drag_pointer_cancel.call(e),
                 {inner}
             }
         }
@@ -357,6 +439,10 @@ pub fn NodeWrapper<N: Clone + PartialEq + 'static>(
                 onmousemove: on_mouse_move,
                 onmouseleave: on_mouse_leave,
                 oncontextmenu: on_context_menu,
+                onpointerdown: move |e: Event<PointerData>| drag_pointer_down.call(e),
+                onpointermove: move |e: Event<PointerData>| drag_pointer_move.call(e),
+                onpointerup: move |e: Event<PointerData>| drag_pointer_up.call(e),
+                onpointercancel: move |e: Event<PointerData>| drag_pointer_cancel.call(e),
                 {inner}
             }
         }
@@ -385,19 +471,21 @@ fn mouse_forwarder<N: Clone + PartialEq + 'static>(
 
 /// Coerce a user-data payload to [`BuiltInNodeData`]. The TS source
 /// passes `node.data` straight through (it's already typed as
-/// `BuiltInNode`'s data shape on built-in components). For Phase 5 we
-/// only support the built-in data shape directly — `N` is constrained
-/// to `BuiltInNodeData` here because the wrapper hard-codes the
-/// built-in renderers as inner components.
+/// `BuiltInNode`'s data shape on built-in components). The wrapper
+/// is generic over `N`, but the inner built-in components only know
+/// how to render `BuiltInNodeData`, so we runtime-downcast:
 ///
-/// Once Phase 7 introduces the typed `nodeTypes` registry, this
+/// * If `N == BuiltInNodeData`, we forward the label payload verbatim.
+/// * Otherwise, we fall back to [`BuiltInNodeData::Empty`] so the
+///   built-in renderers stay well-typed.
+///
+/// When Phase 7 introduces the typed `nodeTypes` registry, this
 /// coercion is replaced by dispatch through the registry.
-fn built_in_data_from<N: Clone>(_node: &Node<N>) -> BuiltInNodeData {
-    // Placeholder: the wrapper is parameterised over `N` but the
-    // inner built-in components consume `BuiltInNodeData`. For a
-    // wrapper that wants to render arbitrary `N`, Phase 7 will swap
-    // the inner-render branch to dispatch through a registry of
-    // `Callback<NodeProps<N>, Element>` instead.
+fn built_in_data_from<N: Clone + 'static>(node: &Node<N>) -> BuiltInNodeData {
+    let any: &dyn std::any::Any = &node.data;
+    if let Some(d) = any.downcast_ref::<BuiltInNodeData>() {
+        return d.clone();
+    }
     BuiltInNodeData::Empty
 }
 

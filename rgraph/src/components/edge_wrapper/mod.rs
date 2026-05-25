@@ -178,11 +178,24 @@ pub fn EdgeWrapper<
         let user_on_click = props.on_click;
         let edge_clone = edge_for_handlers.clone();
         move |evt: Event<MouseData>| {
-            use dioxus::prelude::WritableExt;
+            use dioxus::html::input_data::keyboard_types::Modifiers;
+            use dioxus::html::point_interaction::ModifiersInteraction;
+            use dioxus::prelude::{ReadableExt, WritableExt};
+            // Stop click from bubbling to `<Pane>::onclick`, which would
+            // otherwise call `store.reset_selected_elements()` and
+            // undo the selection we're about to make.
+            evt.stop_propagation();
             if is_selectable {
                 store.nodes_selection_active.clone().set(false);
-                let multi = *store.multi_selection_active.peek();
-                if edge_clone.selected.unwrap_or(false) && multi {
+                let mods = evt.modifiers();
+                let key_multi = mods.contains(Modifiers::META) || mods.contains(Modifiers::CONTROL);
+                let prev_multi = *store.multi_selection_active.peek();
+                if key_multi != prev_multi {
+                    store.multi_selection_active.clone().set(key_multi);
+                }
+
+                let active_multi = key_multi || prev_multi;
+                if edge_clone.selected.unwrap_or(false) && active_multi {
                     store.unselect_nodes_and_edges(
                         crate::types::general::UnselectNodesAndEdgesParams {
                             nodes: Some(Vec::new()),
@@ -191,6 +204,10 @@ pub fn EdgeWrapper<
                     );
                 } else {
                     store.add_selected_edges(vec![id.clone()]);
+                }
+
+                if !key_multi && prev_multi {
+                    store.multi_selection_active.clone().set(false);
                 }
             }
             if let Some(cb) = user_on_click {
@@ -217,6 +234,19 @@ pub fn EdgeWrapper<
                 return;
             }
             let key = evt.key().to_string();
+            // Backspace / Delete: remove every currently-selected node
+            // and edge. The global `useKeyPress` listener that should
+            // drive this hasn't been wired up yet, so we route the
+            // delete through per-element keydown — clicking an edge
+            // focuses it (`tabindex="0"`), then Backspace fires here.
+            if key == "Backspace" || key == "Delete" {
+                evt.prevent_default();
+                crate::hooks::use_global_key_handler::GlobalKeyHandlerEffects::<N, E> {
+                    store,
+                }
+                .run_delete();
+                return;
+            }
             const SELECT_KEYS: &[&str] = &["Enter", " ", "Escape"];
             if SELECT_KEYS.contains(&key.as_str()) && is_selectable {
                 let unselect = key == "Escape";

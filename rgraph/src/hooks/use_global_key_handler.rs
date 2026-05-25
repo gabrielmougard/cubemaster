@@ -39,6 +39,21 @@ pub struct GlobalKeyHandlerEffects<N: Clone + PartialEq + 'static, E: Clone + Pa
     pub store: RGraphStore<N, E>,
 }
 
+// `RGraphStore<N, E>` is `Copy` (all its fields are `Signal` /
+// `Copy`), so the effects bundle can be too — `use_effect` callers
+// often want to capture it into two independent closures.
+impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> Copy
+    for GlobalKeyHandlerEffects<N, E>
+{
+}
+impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> Clone
+    for GlobalKeyHandlerEffects<N, E>
+{
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
 impl<N: Clone + PartialEq + 'static, E: Clone + PartialEq + 'static> GlobalKeyHandlerEffects<N, E> {
     /// Apply the delete-on-press effect: filter selected items and
     /// dispatch them through `trigger_*_changes`. Mirrors TS lines

@@ -1,0 +1,854 @@
+/* =========================================================================
+ * Scenario Editor — view-scoped styles. Layered on top of rgraph's
+ * base.css + style.css (mounted by ScenarioView).
+ * =======================================================================*/
+
+.scenario-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+
+/* ---------- Toolbar ---------------------------------------------------- */
+
+.scenario-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 28px 16px 28px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.scenario-title-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scenario-subtitle {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.scenario-mode-switch {
+  display: inline-flex;
+  align-items: stretch;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px;
+  gap: 4px;
+}
+
+.mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.mode-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.mode-btn.active {
+  background: var(--accent-primary);
+  color: white;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 0 24px var(--accent-primary-glow);
+}
+
+.mode-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+/* ---------- 3-column body --------------------------------------------- */
+
+.scenario-body {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 0;
+  min-height: 0;
+}
+
+.scenario-pane {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-subtle);
+  padding: 20px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.scenario-pane-right {
+  border-right: 0;
+  border-left: 1px solid var(--border-subtle);
+}
+
+.pane-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pane-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.pane-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.pane-section-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+}
+
+.pane-pill-start { color: #4ade80; border-color: rgba(74, 222, 128, 0.35); background: rgba(74, 222, 128, 0.08); }
+.pane-pill-scene { color: var(--accent-primary-hover); border-color: rgba(129, 140, 248, 0.35); background: var(--accent-primary-glow); }
+.pane-pill-end   { color: #fb7185; border-color: rgba(251, 113, 133, 0.35); background: rgba(251, 113, 133, 0.08); }
+.pane-pill-edge  { color: var(--text-secondary); }
+
+.pane-empty {
+  gap: 12px;
+}
+
+.pane-empty-text {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pane-hint-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.pane-hint-list strong { color: var(--text-primary); }
+
+.pane-reset-btn { width: 100%; justify-content: center; }
+
+.pane-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+/* ---------- Palette buttons ------------------------------------------- */
+
+.palette-btn {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+
+.palette-btn:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+}
+
+.palette-btn-icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.palette-btn-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.palette-btn-text strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.palette-btn-text small {
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.palette-btn-start:hover { border-color: #4ade80; }
+.palette-btn-scene:hover { border-color: var(--accent-primary); }
+.palette-btn-end:hover   { border-color: #fb7185; }
+
+.palette-btn-start .palette-btn-icon { color: #4ade80; }
+.palette-btn-scene .palette-btn-icon { color: var(--accent-primary-hover); }
+.palette-btn-end   .palette-btn-icon { color: #fb7185; }
+
+/* ---------- Inspector fields ------------------------------------------ */
+
+.field-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.field-input,
+.field-textarea {
+  width: 100%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.field-input:focus,
+.field-textarea:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-glow);
+}
+
+.field-textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: var(--font-sans);
+}
+
+.field-hint {
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-top: -4px;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.field-label-inline {
+  color: var(--text-muted);
+  font-size: 11px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+}
+
+.field-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.field-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.field-checkbox input[type="checkbox"] {
+  accent-color: var(--accent-primary);
+}
+
+.edge-flow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  background: var(--bg-tertiary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+.edge-flow-node {
+  flex: 1;
+  color: var(--text-primary);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.edge-flow-arrow {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* ---------- Canvas ---------------------------------------------------- */
+
+.scenario-canvas {
+  position: relative;
+  min-height: 0;
+  background-color: var(--bg-primary);
+}
+
+/* The dotted grid is painted on the rgraph wrapper div itself (which
+   is the topmost element inside `.scenario-canvas` and the one that
+   carries the rgraph stylesheet's `background-color` rule). If we
+   painted it on `.scenario-canvas` it would be hidden by the wrapper's
+   own opaque background. */
+.scenario-canvas .react-flow {
+  background-color: var(--bg-primary) !important;
+  background-image:
+    radial-gradient(circle, #3a3a52 1.2px, transparent 1.6px),
+    radial-gradient(circle, rgba(99, 102, 241, 0.12) 1.4px, transparent 1.8px);
+  background-size: 22px 22px, 110px 110px;
+  background-position: 0 0, 0 0;
+  background-repeat: repeat, repeat;
+}
+
+.scenario-canvas-play::after {
+  /* Subtle inset glow when "live". */
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px var(--accent-primary-glow);
+  border-radius: 0;
+}
+
+/* The <RGraph> renders into a 100% box; force the parent to size it. */
+.scenario-canvas > div[id="scenario-graph"] {
+  width: 100%;
+  height: 100%;
+}
+
+/* Dark theme override for rgraph internals — the rgraph stylesheet uses
+   --xy-* CSS custom properties; we re-point them at our palette so the
+   graph fits CubeMaster's UI. Scoped to .scenario-canvas to avoid
+   leaking. */
+.scenario-canvas {
+  --xy-background-color: var(--bg-primary);
+  --xy-background-pattern-color: #3a3a52;
+
+  --xy-node-background-color-default: var(--bg-elevated);
+  --xy-node-color-default: var(--text-primary);
+  --xy-node-border-default: 1px solid var(--border);
+  --xy-node-border-radius-default: 10px;
+  --xy-node-boxshadow-default: 0 4px 16px rgba(0, 0, 0, 0.45);
+
+  --xy-edge-stroke: #5a5a6e;
+  --xy-edge-stroke-selected: var(--accent-primary-hover);
+  --xy-edge-stroke-width: 1.5;
+
+  --xy-handle-background-color: var(--accent-primary);
+  --xy-handle-border-color: var(--bg-primary);
+
+  --xy-connection-line-stroke: var(--accent-primary-hover);
+
+  --xy-controls-button-background-color: var(--bg-elevated);
+  --xy-controls-button-background-color-hover: var(--bg-hover);
+  --xy-controls-button-color: var(--text-primary);
+  --xy-controls-button-border-color: var(--border);
+
+  --xy-minimap-background-color: var(--bg-secondary);
+  --xy-minimap-mask-background-color: rgba(15, 15, 19, 0.6);
+  --xy-minimap-node-background-color: var(--accent-primary);
+
+  --xy-attribution-background-color: transparent;
+}
+
+/* Background dots: keep them above the canvas's own background so they
+   stay visible regardless of stacking-context quirks, and make the
+   default dot color a bit punchier. */
+.scenario-canvas .react-flow__background {
+  z-index: 0;
+}
+.scenario-canvas .react-flow__background-pattern.dots {
+  fill: var(--xy-background-pattern-color);
+}
+
+/* Force panel positions explicitly so we don't rely on CSS nesting
+   support landing in every WebKit build. */
+.scenario-canvas .react-flow__panel { position: absolute; z-index: 5; margin: 15px; pointer-events: all; }
+.scenario-canvas .react-flow__panel.top    { top: 0; }
+.scenario-canvas .react-flow__panel.bottom { bottom: 0; }
+.scenario-canvas .react-flow__panel.left   { left: 0; }
+.scenario-canvas .react-flow__panel.right  { right: 0; }
+.scenario-canvas .react-flow__panel.center.top,
+.scenario-canvas .react-flow__panel.center.bottom { left: 50%; transform: translateX(-50%); }
+
+/* Pane defaults (in case CSS nesting isn't picked up). */
+.scenario-canvas .react-flow__pane              { z-index: 1; cursor: default; }
+.scenario-canvas .react-flow__pane.draggable    { cursor: grab; }
+.scenario-canvas .react-flow__pane.dragging     { cursor: grabbing; }
+.scenario-canvas .react-flow__pane.selection    { cursor: pointer; }
+
+/* Node draggability cursor — give the user a hint that nodes are
+   grabbable. The wrapper sets `.draggable` and `.dragging` classes. */
+.scenario-canvas .react-flow__node.draggable           { cursor: grab; }
+.scenario-canvas .react-flow__node.draggable.dragging  { cursor: grabbing; }
+
+/* Handles: flat positioning rules — the upstream stylesheet uses CSS
+   nesting (`& -bottom { ... }`) which doesn't always land in WebKit. We
+   re-emit them explicitly so handles dock to the four sides of the
+   node correctly, and we compose the position transform with the
+   hover scale so hover doesn't yank the handle off its anchor. */
+.scenario-canvas .react-flow__handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent-primary);
+  border: 2px solid var(--bg-primary);
+  border-radius: 999px;
+  cursor: crosshair;
+  pointer-events: all;
+  transition: box-shadow var(--transition-fast), background var(--transition-fast);
+  /* Make the handle eat its own click so the underlying node doesn't
+     get a stray drag-start. */
+  z-index: 4;
+}
+.scenario-canvas .react-flow__handle-top {
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.scenario-canvas .react-flow__handle-bottom {
+  top: auto;
+  bottom: 0;
+  left: 50%;
+  transform: translate(-50%, 50%);
+}
+.scenario-canvas .react-flow__handle-left {
+  top: 50%;
+  left: 0;
+  transform: translate(-50%, -50%);
+}
+.scenario-canvas .react-flow__handle-right {
+  top: 50%;
+  right: 0;
+  transform: translate(50%, -50%);
+}
+.scenario-canvas .react-flow__handle:hover {
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.22);
+}
+.scenario-canvas .react-flow__handle.clickconnecting,
+.scenario-canvas .react-flow__handle.connectingfrom {
+  background: #facc15;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.25);
+}
+
+/* Tint each node kind. */
+.scenario-canvas .react-flow__node-input {
+  background: linear-gradient(135deg, rgba(74, 222, 128, 0.18), var(--bg-elevated) 70%);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+}
+.scenario-canvas .react-flow__node-output {
+  background: linear-gradient(135deg, rgba(251, 113, 133, 0.18), var(--bg-elevated) 70%);
+  border: 1px solid rgba(251, 113, 133, 0.45);
+}
+.scenario-canvas .react-flow__node-default {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+}
+
+.scenario-canvas .react-flow__node {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  border-radius: 10px;
+  min-width: 140px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.scenario-canvas .react-flow__node.selected {
+  outline: 2px solid var(--accent-primary-hover);
+  outline-offset: 2px;
+  box-shadow: 0 4px 28px rgba(99, 102, 241, 0.45);
+}
+
+.scenario-canvas-play .react-flow__node.selected {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.15), 0 4px 32px rgba(250, 204, 21, 0.35);
+  animation: scenario-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes scenario-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.15), 0 4px 32px rgba(250, 204, 21, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(250, 204, 21, 0.05), 0 4px 36px rgba(250, 204, 21, 0.5);
+  }
+}
+
+/* Tighten the Controls/MiniMap so they stop looking like web-flavored
+   widgets inside our app shell. The upstream stylesheet uses CSS
+   nesting that doesn't always parse, so we emit the necessary
+   sizing/layout rules in flat form here. Without these, the buttons
+   collapse to 0×0 and the panel renders as an invisible 0-size box. */
+.scenario-canvas .react-flow__controls {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+}
+.scenario-canvas .react-flow__controls.horizontal {
+  flex-direction: row;
+}
+.scenario-canvas .react-flow__controls-button {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+.scenario-canvas .react-flow__controls-button:hover {
+  background: var(--bg-hover);
+}
+.scenario-canvas .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+.scenario-canvas .react-flow__controls.horizontal .react-flow__controls-button {
+  border-bottom: none;
+  border-right: 1px solid var(--border-subtle);
+}
+.scenario-canvas .react-flow__controls.horizontal .react-flow__controls-button:last-child {
+  border-right: none;
+}
+.scenario-canvas .react-flow__controls-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.scenario-canvas .react-flow__controls-button svg {
+  width: 14px;
+  height: 14px;
+  fill: currentColor;
+}
+.scenario-canvas .react-flow__minimap {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  /* SVG defaults to `pointer-events: visiblePainted`, which doesn't fire
+     on transparent regions — make the whole minimap clickable so the
+     pannable handler in `<MiniMap>` actually gets pointerdown/up. */
+  background: var(--bg-secondary);
+}
+.scenario-canvas .react-flow__minimap-svg {
+  display: block;
+  pointer-events: all;
+  cursor: grab;
+}
+.scenario-canvas .react-flow__minimap-svg:active {
+  cursor: grabbing;
+}
+
+/* ---------- Play mode pieces ----------------------------------------- */
+
+.play-current-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.play-current-card.empty {
+  border-style: dashed;
+  color: var(--text-muted);
+}
+
+.play-current-tag {
+  align-self: flex-start;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--accent-primary-glow);
+  color: var(--accent-primary-hover);
+}
+
+.play-current-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.play-current-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.play-current-asset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+.play-current-asset-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.play-current-asset-value {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.play-current-id-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.play-current-id-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.play-current-id-row code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.play-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.play-trigger-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.play-trigger-btn:hover {
+  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.18);
+}
+
+.play-trigger-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.play-trigger-target {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.play-deadend {
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* ---------- Sidebar tweaks ------------------------------------------- */
+
+/* ---------- Context menu (right-click) -------------------------------- */
+
+.scenario-ctxmenu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: all;
+  background: transparent;
+}
+
+.scenario-ctxmenu {
+  position: fixed;
+  z-index: 101;
+  min-width: 200px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  outline: none;
+  animation: scenario-ctxmenu-in 90ms ease-out;
+}
+
+@keyframes scenario-ctxmenu-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.scenario-ctxmenu-header {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 6px 10px 4px 10px;
+}
+
+.scenario-ctxmenu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.scenario-ctxmenu-item:hover,
+.scenario-ctxmenu-item:focus-visible {
+  background: var(--bg-hover);
+  outline: none;
+}
+
+.scenario-ctxmenu-item-danger {
+  color: #fb7185;
+}
+.scenario-ctxmenu-item-danger:hover,
+.scenario-ctxmenu-item-danger:focus-visible {
+  background: rgba(251, 113, 133, 0.12);
+}
+
+.scenario-ctxmenu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scenario-ctxmenu-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.scenario-ctxmenu-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.nav-badge-exp {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #facc15;
+  background: rgba(250, 204, 21, 0.12);
+  padding: 1px 5px;
+  border-radius: 999px;
+}
+
+.experimental-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  margin-right: 6px;
+}
